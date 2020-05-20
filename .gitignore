@@ -1,0 +1,10 @@
+/.idea/
+/target/
+/example.log
+/src/main/resources/checkSum.data
+/src/main/resources/trace1.data
+/src/main/resources/trace1_data.tar.gz
+/src/main/resources/trace2.data
+/src/main/resources/trace2_data.tar.gz
+/src/main/resources/static/
+/LinkTracking.iml
