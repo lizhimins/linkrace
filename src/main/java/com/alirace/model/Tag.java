@@ -12,7 +12,7 @@ public class Tag {
     private static final String TAG_SEPARATOR = "&";
 
     // key:value 分隔符
-    private static final String KV_Separator = "=";
+    private static final String KV_SEPARATOR = "=";
 
     // 错误码
     private static final String HTTP_STATUS_CODE = "http.status_code";
@@ -31,7 +31,7 @@ public class Tag {
             if (item == null || item.length() == 0) {
                 continue;
             }
-            int index = item.indexOf(KV_Separator);
+            int index = item.indexOf(KV_SEPARATOR);
             // 兼容处理2, 找不到分隔符
             if (index == -1) {
                 continue;
