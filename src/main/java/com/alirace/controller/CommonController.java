@@ -5,17 +5,14 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.lang.reflect.AnnotatedType;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @RestController
 public class CommonController {
 
-    private static String HOST = "localhost";
-
-    private static Integer DATA_SOURCE_PORT = 0;
-
     public static volatile AtomicBoolean isReady = new AtomicBoolean(false);
+    private static String HOST = "localhost";
+    private static Integer DATA_SOURCE_PORT = 0;
 
     public static Integer getDataSourcePort() {
         return DATA_SOURCE_PORT;
