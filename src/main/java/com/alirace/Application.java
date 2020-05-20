@@ -1,5 +1,7 @@
 package com.alirace;
 
+import com.alirace.client.ClientService;
+import com.alirace.server.ServerService;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.context.annotation.ComponentScan;
@@ -14,13 +16,11 @@ public class Application {
     public static final String BACKEND_PROCESS_PORT1 = "8002";
     public static final String BACKEND_PROCESS_PORT2 = "8003";
     public static final String BACKEND_PROCESS_PORT3 = "8004";
-    public static int BATCH_SIZE = 20000;
-    public static int PROCESS_COUNT = 2;
 
     private static String systemPort = BACKEND_PROCESS_PORT1;
 
     public static String getSystemPort() {
-        return systemPort;
+        return System.getProperty("server.port", "8080");
     }
 
     public static boolean isClientProcess() {
@@ -40,15 +40,14 @@ public class Application {
     }
 
     public static void main(String[] args) throws Exception {
-        systemPort = args[0];
-        int port = Integer.parseInt(systemPort);
-
+        String port = getSystemPort();
+        // 启动 springboot
         SpringApplication.run(Application.class, "--server.port=" + port);
         if (isBackendProcess()) {
-            //CollectService.init(BACKEND_PROCESS_PORT2);
+            ServerService.start();
         }
         if (isClientProcess()) {
-            //FilterService.init(BACKEND_PROCESS_PORT2);
+            ClientService.start();
         }
     }
 }
