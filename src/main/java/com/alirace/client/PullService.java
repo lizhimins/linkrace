@@ -18,8 +18,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-import static com.alirace.client.ClientService.MAX_LENGTH;
-import static com.alirace.client.ClientService.pullQueue;
+import static com.alirace.client.ClientService.*;
 
 /**
  * 生产者
@@ -49,11 +48,15 @@ public class PullService implements Runnable {
         String line;
         while ((line = bf.readLine()) != null) {
             if (line.length() > 1) {
+                // 计算在哪个队列
+                int index = line.charAt(1) & 0x01;
+                // 获得队列引用
+                LinkedBlockingQueue<String> queue = services.get(index).pullQueue;
                 // 队列满的话需要等待
-                while (pullQueue.size() >= MAX_LENGTH) {
-                    TimeUnit.SECONDS.sleep(1L);
+                while (queue.size() >= CacheService.MAX_LENGTH) {
+                    TimeUnit.MILLISECONDS.sleep(1000);
                 }
-                pullQueue.add(line);
+                queue.put(line);
             }
         }
         bf.close();
