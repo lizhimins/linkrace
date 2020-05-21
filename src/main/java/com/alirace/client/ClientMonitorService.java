@@ -36,7 +36,12 @@ public class ClientMonitorService implements Runnable {
 
     private void printStatus() {
         StringBuffer sb = new StringBuffer();
-        sb.append("LO: " + String.format("%8s, ", logOffset));
+
+        sb.append(String.format("LO: %8s, ", logOffset));
+        if (ClientService.services.size() == 2) {
+            sb.append(String.format("CA1: %s,", ClientService.services.get(0).toString()));
+            sb.append(String.format("CA2: %s,", ClientService.services.get(1).toString()));
+        }
 //        sb.append("QU: " + String.format("%6s, ", ClientService.pullQueue.size()));
         // sb.append("time: " + String.format("%13s, ", DateUtil.getHumanReadTime(logStartTimestamp)));
         // sb.append("pullCache: " + String.format("%5s, ", DownloadService.pullCache.asMap().size()));

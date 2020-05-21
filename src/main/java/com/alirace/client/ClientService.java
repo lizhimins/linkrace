@@ -19,7 +19,7 @@ public class ClientService {
         ClientMonitorService.start();
         for (int i = 0; i < 2; i++) {
             CacheService cacheService = new CacheService();
-            cacheService.init();
+            cacheService.start();
             services.add(cacheService);
         }
         log.info("Client initializing finish...");
