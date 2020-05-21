@@ -7,7 +7,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class Record {
 
-
     // 是否上传过了, 默认没有上传过
     private volatile static AtomicBoolean isUpload = new AtomicBoolean(false);
 
@@ -33,6 +32,9 @@ public class Record {
     public void addTraceLog(String traceLog) {
         if (traceLog == null || traceLog.length() == 0) {
             return;
+        }
+        if (!isError) {
+            isError = Tag.isError(TraceLog.getTag(traceLog));
         }
         list.add(traceLog);
     }

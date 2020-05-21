@@ -11,9 +11,12 @@ public class RecordTest {
     @Test
     public void addTraceLog() {
         Record record = new Record("1");
-        record.addTraceLog("traceLog1");
-        record.addTraceLog("traceLog2");
+        String log1 = "1d37a8b17db8568b|1589285985482007|||||||http.status_code=200";
+        String log2 = "1d37a8b17db8568b|1589285985482050|||||||http.status_code=201";
+        record.addTraceLog(log1);
+        record.addTraceLog(log2);
         assertEquals(2, record.getList().size());
+        assertEquals(true, record.isError());
     }
 
     @Test

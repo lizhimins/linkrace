@@ -1,6 +1,7 @@
 package com.alirace.client;
 
 import com.alirace.model.Record;
+import com.alirace.model.TraceLog;
 import com.alirace.server.ServerService;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
@@ -63,6 +64,7 @@ public class ClientService {
 
     public static void pullData(String path) throws IOException, InterruptedException {
         log.info("Client pull data start...");
+        log.info("Data path: " + path);
         URL url = new URL(path);
         HttpURLConnection httpConnection = (HttpURLConnection) url.openConnection(Proxy.NO_PROXY);
         InputStream input = httpConnection.getInputStream();
@@ -88,6 +90,16 @@ public class ClientService {
     }
 
     public static void putDataToCache(String data) {
-        //pullCache.put();
+        String traceId = TraceLog.getTraceId(data);
+        // Lookup an entry, or null if not found
+        Record record = pullCache.getIfPresent(traceId);
+        // Insert or update an entry
+        if (record == null) {
+            record = new Record(traceId);
+            //record.addTraceLog(traceLog);
+            pullCache.put(traceId, record);
+        } else {
+            //record.addTraceLog(traceLog);
+        }
     }
 }
