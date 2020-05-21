@@ -1,14 +1,11 @@
 package com.alirace.server;
 
 import com.alibaba.fastjson.JSON;
-import com.alirace.client.CacheService;
 import com.alirace.client.ClientMonitorService;
 import com.alirace.model.Record;
-import com.alirace.model.TraceLog;
 import com.alirace.netty.MyDecoder;
 import com.alirace.netty.MyEncoder;
 import com.alirace.util.HttpUtil;
-import com.alirace.util.MD5Util;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -21,7 +18,6 @@ import okhttp3.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Iterator;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -30,7 +26,7 @@ public class ServerService {
     private static final Logger log = LoggerFactory.getLogger(ServerService.class);
 
     // 用来存放待合并的数据 traceId -> record
-    private static final int MAX_HASHMAP_SIZE = 1024;
+    private static final int MAX_HASHMAP_SIZE = 1024 * 16;
     public static ConcurrentHashMap<String, Record> mergeMap = new ConcurrentHashMap(MAX_HASHMAP_SIZE);
 
     // 用来存放剩下的数据 traceId -> md5
@@ -40,31 +36,13 @@ public class ServerService {
     public static AtomicInteger queryRequestNum = new AtomicInteger(0);
     public static AtomicInteger queryResponseNum = new AtomicInteger(0);
 
-    // 客户端状态机
-    // 已经完成读入任务的机器数量
+    // 客户端状态机, 已经完成读入任务的机器数量
     public static AtomicInteger readFinishMachineNum = new AtomicInteger(0);
 
-    public static void start() {
+    public static void start(int port) throws Exception {
         log.info("Server initializing start...");
-        ClientMonitorService.start();
-        log.info("Server initializing finish...");
-    }
-
-    // 监听的端口号
-    private static int PORT = 8002;
-
-    public static int totalYes = 0;
-
-    public static void init(String port) throws Exception {
         // 状态监控服务
         ServerMonitorService.start();
-        // 调试用 md5 校验服务
-        // new VisualizationCheckSum().run();
-        PORT = Integer.parseInt(port);
-        ServerMonitorService.start();
-    }
-
-    private static void start(int port) throws Exception {
         log.info("Server start listen at " + port);
         EventLoopGroup bossGroup = new NioEventLoopGroup();
         EventLoopGroup workerGroup = new NioEventLoopGroup();
@@ -91,14 +69,6 @@ public class ServerService {
         }
     }
 
-    public void run() {
-        // 初始化 Netty
-        try {
-            start(PORT);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
 
     // 结果转移 + 刷盘
     public static void flushResult(Record record) {

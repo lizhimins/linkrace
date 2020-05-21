@@ -44,7 +44,7 @@ public class Application {
         // 启动 springboot
         SpringApplication.run(Application.class, "--server.port=" + port);
         if (isBackendProcess()) {
-            ServerService.start();
+            ServerService.start(Integer.parseInt(BACKEND_PROCESS_PORT2));
         }
         if (isClientProcess()) {
             ClientService.start();
