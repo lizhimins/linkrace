@@ -31,6 +31,12 @@ public class CacheService extends Thread {
     public static final int MAX_PULL_CACHE_SIZE = 20 * 1000;
     public static final int MAX_QUERY_CACHE_SIZE = 60 * 1000;
 
+    // 查询缓存
+    public Cache<String, Record> queryCache = Caffeine.newBuilder()
+            .initialCapacity(MAX_QUERY_CACHE_SIZE)
+            .maximumSize(MAX_QUERY_CACHE_SIZE)
+            .build();
+
     // LruCache, 保持对放入数据的引用, 因为入站和上传同时使用
     // Key: traceId
     // Val: timestamp & linkedList<TraceLog>
@@ -38,15 +44,23 @@ public class CacheService extends Thread {
             .initialCapacity(MAX_PULL_CACHE_SIZE)
             .maximumSize(MAX_PULL_CACHE_SIZE)
             .removalListener(((key, value, cause) -> {
-                //System.out.println();
+                String traceId = (String) key;
+                Record record = (Record) value;
+                if (ClientService.waitMap.get(traceId) != null) {
+                    ClientService.waitMap.put(traceId, true);
+                    ClientService.responseRecord(record);
+                } else {
+                    // 当前 traceId 有问题, 需要主动上传
+                    if (record.isError()) {
+                        ClientService.waitMap.put(traceId, true);
+                        ClientService.uploadRecord(record);
+                        return;
+                    } else {
+                        queryCache.put(traceId, record);
+                    }
+                }
             }))
             .build();;
-
-    // 查询缓存
-    public Cache<String, Record> queryCache = Caffeine.newBuilder()
-            .initialCapacity(MAX_QUERY_CACHE_SIZE)
-            .maximumSize(MAX_QUERY_CACHE_SIZE)
-            .build();
 
     private Record preRecord;
 
@@ -75,6 +89,9 @@ public class CacheService extends Thread {
                     preRecord = record;
                 }
             }
+            log.info("Client clean pull cache...");
+            pullCache.invalidateAll();
+            log.info("All data is checked...");
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
@@ -83,9 +100,11 @@ public class CacheService extends Thread {
     @Override
     public String toString() {
         StringBuffer sb = new StringBuffer();
+        sb.append("(");
         sb.append(String.format("L:%6d,", pullQueue.size()));
         sb.append(String.format("P:%6d,", pullCache.asMap().size()));
-        sb.append(String.format("Q:%6d,", queryCache.asMap().size()));
+        sb.append(String.format("Q:%6d", queryCache.asMap().size()));
+        sb.append(")");
         return sb.toString();
     }
 }

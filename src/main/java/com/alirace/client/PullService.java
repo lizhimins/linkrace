@@ -34,6 +34,7 @@ public class PullService implements Runnable {
     public static boolean isFinish = false;
 
     public static void start() {
+        isFinish = false;
         Thread thread = new Thread(new PullService(), "PullService");
         thread.start();
     }
@@ -59,6 +60,7 @@ public class PullService implements Runnable {
                 queue.put(line);
             }
         }
+        isFinish = true;
         bf.close();
         input.close();
         log.info("Client pull data finish...");

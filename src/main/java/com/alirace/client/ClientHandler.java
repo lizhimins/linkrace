@@ -23,11 +23,11 @@ public class ClientHandler extends SimpleChannelInboundHandler<Object> {
         // 动态代理
         // 如果收到查询请求
         if (MessageType.QUERY.getValue() == message.getType()) {
-            String traceId = new String(message.getBody());
-            // log.info("QUERY: " + traceId);
-            // 调用查询服务上传查询结果
-            ClientMonitorService.queryCount.incrementAndGet();
-            return;
+//            String traceId = new String(message.getBody());
+//            // log.info("QUERY: " + traceId);
+//            // 调用查询服务上传查询结果
+//            ClientMonitorService.queryCount.incrementAndGet();
+//            return;
         }
 
     }

@@ -3,6 +3,8 @@ package com.alirace.server;
 import com.alirace.controller.CommonController;
 import com.alirace.model.Message;
 import com.alirace.model.MessageType;
+import com.alirace.model.Record;
+import com.alirace.util.SerializeUtil;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
@@ -31,11 +33,11 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
         Channel channel = ctx.channel();
 
         Message message = (Message) obj;
-        // log.info("Client->Server: " + channel.remoteAddress() + " " + message.toString());
 
-        // 动态代理
         // 如果是上传数据
         if (MessageType.UPLOAD.getValue() == message.getType()) {
+            Record record = SerializeUtil.deserialize(message.getBody(), Record.class);
+            log.info(record.toString());
         }
     }
 

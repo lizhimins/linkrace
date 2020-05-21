@@ -1,9 +1,13 @@
 package com.alirace.client;
 
 import com.alirace.controller.CommonController;
+import com.alirace.model.Message;
+import com.alirace.model.MessageType;
+import com.alirace.model.Record;
 import com.alirace.netty.MyDecoder;
 import com.alirace.netty.MyEncoder;
 import com.alirace.server.ServerService;
+import com.alirace.util.SerializeUtil;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -15,7 +19,12 @@ import sun.misc.Cache;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+
+import static com.alirace.client.ClientMonitorService.responseCount;
+import static com.alirace.client.ClientMonitorService.uploadCount;
 
 public class ClientService {
 
@@ -39,10 +48,29 @@ public class ClientService {
     // 为了尽快消费, 设置两台机器之间同步时间差的阈值, 单位是纳秒, 默认30秒, 越大越快命中率低
     public static final long TIMESTAMP_SYNC_THRESHOLD = 60 * 1000 * 1000L;
 
+    // 监听等待池
+    public static ConcurrentHashMap<String, Boolean> waitMap = new ConcurrentHashMap<>();
+
+    // 上传调用链
+    public static void uploadRecord(Record record) {
+        uploadCount.incrementAndGet();
+        byte[] body = SerializeUtil.serialize(record);
+        Message message = new Message(MessageType.UPLOAD.getValue(), body);
+        future.channel().writeAndFlush(message);
+    }
+
+    // 查询响应
+    public static void responseRecord(Record record) {
+        responseCount.incrementAndGet();
+        byte[] body = SerializeUtil.serialize(record);
+        Message message = new Message(MessageType.RESPONSE.getValue(), body);
+        future.channel().writeAndFlush(message);
+    }
+
     public static void start() throws InterruptedException {
         log.info("Client initializing start...");
         ClientMonitorService.start();
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < 4; i++) {
             CacheService cacheService = new CacheService();
             cacheService.start();
             services.add(cacheService);
