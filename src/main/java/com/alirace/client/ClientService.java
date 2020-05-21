@@ -15,6 +15,9 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.Proxy;
 import java.net.URL;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Queue;
 import java.util.concurrent.*;
 
 public class ClientService {
@@ -25,9 +28,6 @@ public class ClientService {
     public static final int MAX_PULL_CACHE_SIZE = 20 * 1000;
     public static final int MAX_QUERY_CACHE_SIZE = 60 * 1000;
 
-    // 阻塞队列最大长度
-    private static final int MAX_LENGTH = 500 * 1000;
-
     // LruCache, 保持对放入数据的引用, 因为入站和上传同时使用
     // Key: traceId
     // Val: timestamp & linkedList<TraceLog>
@@ -35,20 +35,24 @@ public class ClientService {
 
     // 查询缓存
     public static Cache<String, Record> queryCache;
+
+    // 阻塞队列最大长度
+    public static final int MAX_LENGTH = 500 * 1000;
+
     // 阻塞队列
-    private static BlockingQueue<Runnable> workQueue = new LinkedBlockingQueue<>();
-    // 业务线程池
-    private static ExecutorService pool = new ThreadPoolExecutor(4, 4,
-            0L, TimeUnit.MILLISECONDS, workQueue);
+    public static LinkedList<String> pullQueue = new LinkedList<>();
 
     public static void start() {
         log.info("Client initializing start...");
+        ClientMonitorService.start();
+        DataService.start();
         pullCache = Caffeine.newBuilder()
                 .initialCapacity(MAX_PULL_CACHE_SIZE)
                 .maximumSize(MAX_PULL_CACHE_SIZE)
                 .removalListener((key, value, cause) -> {
                     String traceId = (String) key;
                     Record record = (Record) value;
+                    queryCache.put(traceId, record);
                 })
                 .build();
 
@@ -60,46 +64,5 @@ public class ClientService {
                 }))
                 .build();
         log.info("Client initializing finish...");
-    }
-
-    public static void pullData(String path) throws IOException, InterruptedException {
-        log.info("Client pull data start...");
-        log.info("Data path: " + path);
-        URL url = new URL(path);
-        HttpURLConnection httpConnection = (HttpURLConnection) url.openConnection(Proxy.NO_PROXY);
-        InputStream input = httpConnection.getInputStream();
-        BufferedReader bf = new BufferedReader(new InputStreamReader(input));
-        String line;
-        while ((line = bf.readLine()) != null) {
-            if (line.length() > 1) {
-                String data = line;
-                while (workQueue.size() > MAX_LENGTH) {
-                    TimeUnit.SECONDS.sleep(1L);
-                }
-                pool.execute(new Runnable() {
-                    @Override
-                    public void run() {
-                        putDataToCache(data);
-                    }
-                });
-            }
-        }
-        bf.close();
-        input.close();
-        log.info("Client pull data finish...");
-    }
-
-    public static void putDataToCache(String data) {
-        String traceId = TraceLog.getTraceId(data);
-        // Lookup an entry, or null if not found
-        Record record = pullCache.getIfPresent(traceId);
-        // Insert or update an entry
-        if (record == null) {
-            record = new Record(traceId);
-            //record.addTraceLog(traceLog);
-            pullCache.put(traceId, record);
-        } else {
-            //record.addTraceLog(traceLog);
-        }
     }
 }

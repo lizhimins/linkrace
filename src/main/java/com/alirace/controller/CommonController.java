@@ -2,6 +2,7 @@ package com.alirace.controller;
 
 import com.alirace.Application;
 import com.alirace.client.ClientService;
+import com.alirace.client.PullService;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -39,7 +40,8 @@ public class CommonController {
         DATA_SOURCE_PORT = port;
         // 开始读入数据
         if (Application.isClientProcess()) {
-            ClientService.pullData(getPath());
+            PullService.path = getPath();
+            PullService.start();
         }
         return "suc";
     }
