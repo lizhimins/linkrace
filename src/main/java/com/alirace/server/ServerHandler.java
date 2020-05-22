@@ -43,8 +43,7 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
             // 反序列化得到数据
             Record record = SerializeUtil.deserialize(message.getBody(), Record.class);
             String traceId = record.getTraceId();
-            log.info(traceId);
-            Record result = mergeMap.get(traceId);
+            // log.info(traceId);
             // 向其他机器广播查询请求
             for (Channel ch : group) {
                 if (ch != channel) {
@@ -53,13 +52,14 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
                     ch.writeAndFlush(query);
                 }
             }
+            Record result = mergeMap.get(traceId);
             // 如果当前内存中不包含 traceId 的调用链路就放入内存, 如果存在的话就合并调用链, 然后刷盘
-//            if (result == null) {
-//                mergeMap.put(record.getTraceId(), record);
-//            } else {
-//                result.merge(record);
-//                ServerService.flushResult(traceId, result);
-//            }
+            if (result == null) {
+                mergeMap.put(traceId, record);
+            } else {
+                result.merge(record);
+                ServerService.flushResult(traceId, result);
+            }
             return;
         }
 

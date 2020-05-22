@@ -89,7 +89,7 @@ public class ServerService implements Runnable {
             iterator.remove();
         }
         String md5 = MD5Util.strToMd5(sb.toString()).toUpperCase();
-        log.info(String.format("TraceId: %16s, MD5: %32s, Cal: %32s %3s %d", traceId, md5));
+        log.info(String.format("TraceId: %16s, MD5: %32s", traceId, md5));
         resultMap.put(traceId, md5);
         mergeMap.remove(traceId);
     }
