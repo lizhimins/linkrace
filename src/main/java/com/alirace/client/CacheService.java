@@ -51,13 +51,21 @@ public class CacheService extends Thread {
                 Record record = (Record) value;
                 if (ClientService.waitMap.get(traceId) != null) {
                     ClientService.waitMap.put(traceId, true);
-                    ClientService.passRecord(record);
+                    try {
+                        ClientService.passRecord(record);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
                     return;
                 } else {
                     if (record.isError()) {
                         // 当前 traceId 有问题, 需要主动上传
                         ClientService.waitMap.put(traceId, true);
-                        ClientService.uploadRecord(record);
+                        try {
+                            ClientService.uploadRecord(record);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
                         return;
                     }
                 }
