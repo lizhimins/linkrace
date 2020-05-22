@@ -15,18 +15,16 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import sun.misc.Cache;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
-import static com.alirace.client.ClientMonitorService.responseCount;
-import static com.alirace.client.ClientMonitorService.uploadCount;
+import static com.alirace.client.ClientMonitor.responseCount;
+import static com.alirace.client.ClientMonitor.uploadCount;
 
-public class ClientService {
+public class ClientService implements Runnable {
 
     private static final Logger log = LoggerFactory.getLogger(ServerService.class);
 
@@ -39,7 +37,7 @@ public class ClientService {
 
     // 服务器相关信息
     public static final String host = "localhost";
-    public static final int port = 8002;
+    public static final int port = 8003;
 
     // 进过过滤服务的日志总量, 单线程调用
     public static long logOffset = 0L;
@@ -56,7 +54,7 @@ public class ClientService {
         uploadCount.incrementAndGet();
         byte[] body = SerializeUtil.serialize(record);
         Message message = new Message(MessageType.UPLOAD.getValue(), body);
-        future.channel().writeAndFlush(message);
+        // future.channel().writeAndFlush(message);
     }
 
     // 查询响应
@@ -64,18 +62,19 @@ public class ClientService {
         responseCount.incrementAndGet();
         byte[] body = SerializeUtil.serialize(record);
         Message message = new Message(MessageType.RESPONSE.getValue(), body);
-        future.channel().writeAndFlush(message);
+        // future.channel().writeAndFlush(message);
     }
 
     public static void start() throws InterruptedException {
         log.info("Client initializing start...");
-        ClientMonitorService.start();
+        ClientMonitor.start();
         for (int i = 0; i < 2; i++) {
             CacheService cacheService = new CacheService();
             cacheService.start();
             services.add(cacheService);
         }
-        startNetty();
+        Thread thread = new Thread(new ClientService(), "ClientService");
+        thread.start();
     }
 
     public static void startNetty() throws InterruptedException {
@@ -102,16 +101,17 @@ public class ClientService {
         if (future != null && future.channel() != null && future.channel().isActive()) {
             return;
         }
-        future = bootstrap.connect(host, port);
+        future = bootstrap.connect(host, port).sync();
         future.addListener(new ChannelFutureListener() {
             @Override
             public void operationComplete(ChannelFuture future) throws Exception {
                 if (future.isSuccess()) {
                     Channel channel = future.channel();
+                    channel.writeAndFlush(new Message(MessageType.STATUS.getValue(), "OK".getBytes())).sync();
                     log.info("Connect to server successfully!");
                     CommonController.isReady.set(true);
                 } else {
-                    // log.info("Failed to connect to server, try connect after 1s");
+                    log.info("Failed to connect to server, try connect after 1s");
                     future.channel().eventLoop().schedule(new Runnable() {
                         @Override
                         public void run() {
@@ -125,5 +125,14 @@ public class ClientService {
                 }
             }
         });
+    }
+
+    @Override
+    public void run() {
+        try {
+            startNetty();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
     }
 }

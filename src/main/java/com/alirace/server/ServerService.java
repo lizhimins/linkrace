@@ -1,7 +1,6 @@
 package com.alirace.server;
 
 import com.alibaba.fastjson.JSON;
-import com.alirace.client.ClientMonitorService;
 import com.alirace.model.Record;
 import com.alirace.netty.MyDecoder;
 import com.alirace.netty.MyEncoder;
@@ -21,7 +20,7 @@ import org.slf4j.LoggerFactory;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
-public class ServerService {
+public class ServerService implements Runnable {
 
     private static final Logger log = LoggerFactory.getLogger(ServerService.class);
 
@@ -38,12 +37,20 @@ public class ServerService {
 
     // 客户端状态机, 已经完成读入任务的机器数量
     public static AtomicInteger readFinishMachineNum = new AtomicInteger(0);
+    // 监听的端口号
+    private static int PORT = 8003;
 
-    public static void start(int port) throws Exception {
+    public static void start() {
         log.info("Server initializing start...");
         // 状态监控服务
-        ServerMonitorService.start();
-        log.info("Server start listen at " + port);
+        ServerMonitor.start();
+
+        Thread thread = new Thread(new ServerService(), "ServerService");
+        thread.start();
+    }
+
+    public static void startNetty() throws Exception {
+        log.info("Server start listen at " + PORT);
         EventLoopGroup bossGroup = new NioEventLoopGroup();
         EventLoopGroup workerGroup = new NioEventLoopGroup();
         try {
@@ -61,14 +68,13 @@ public class ServerService {
                         }
                     });
             // bind port
-            ChannelFuture future = bootstrap.bind(port).sync();
+            ChannelFuture future = bootstrap.bind(PORT).sync();
             future.channel().closeFuture().sync();
         } finally {
             bossGroup.shutdownGracefully();
             workerGroup.shutdownGracefully();
         }
     }
-
 
     // 结果转移 + 刷盘
     public static void flushResult(Record record) {
@@ -117,5 +123,14 @@ public class ServerService {
             log.warn("fail to call finish", e);
         }
         log.info("Server data upload success...");
+    }
+
+    @Override
+    public void run() {
+        try {
+            startNetty();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }

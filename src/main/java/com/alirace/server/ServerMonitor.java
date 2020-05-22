@@ -5,9 +5,9 @@ import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.TimeUnit;
 
-public class ServerMonitorService implements Runnable {
+public class ServerMonitor implements Runnable {
 
-    private static final Logger log = LoggerFactory.getLogger(ServerMonitorService.class);
+    private static final Logger log = LoggerFactory.getLogger(ServerMonitor.class);
 
     public static void printStatus() {
         StringBuffer sb = new StringBuffer();
@@ -23,7 +23,7 @@ public class ServerMonitorService implements Runnable {
     }
 
     public static void start() {
-        Thread t = new Thread(new ServerMonitorService(), "ServerMonitorService");
+        Thread t = new Thread(new ServerMonitor(), "ServerMonitorService");
         t.start();
     }
 

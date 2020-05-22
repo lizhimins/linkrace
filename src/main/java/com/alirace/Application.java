@@ -7,7 +7,7 @@ import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.context.annotation.ComponentScan;
 
 @EnableAutoConfiguration
-@ComponentScan(basePackages = "com.alirace")
+@ComponentScan(basePackages = "com.alirace.controller")
 public class Application {
 
     // 端口常量直接定义在这里
@@ -44,7 +44,7 @@ public class Application {
         // 启动 springboot
         SpringApplication.run(Application.class, "--server.port=" + port);
         if (isBackendProcess()) {
-            ServerService.start(Integer.parseInt(BACKEND_PROCESS_PORT2));
+            ServerService.start();
         }
         if (isClientProcess()) {
             ClientService.start();

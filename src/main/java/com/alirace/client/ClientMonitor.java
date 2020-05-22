@@ -8,9 +8,9 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static com.alirace.client.ClientService.logOffset;
 
-public class ClientMonitorService implements Runnable {
+public class ClientMonitor implements Runnable {
 
-    private static final Logger log = LoggerFactory.getLogger(ClientMonitorService.class);
+    private static final Logger log = LoggerFactory.getLogger(ClientMonitor.class);
 
     // 当前读入日志的时间戳, 用来进行过滤服务的同步, 这个时间在并发下是非精确的
     public static long logStartTimestamp = 0L;
@@ -28,7 +28,7 @@ public class ClientMonitorService implements Runnable {
     public static long passiveDropCount = 0L;
 
     public static void start() {
-        Thread thread = new Thread(new ClientMonitorService(), "MonitorService");
+        Thread thread = new Thread(new ClientMonitor(), "MonitorService");
         thread.start();
         log.info("MonitorService start...");
     }

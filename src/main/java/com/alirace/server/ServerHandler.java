@@ -3,8 +3,6 @@ package com.alirace.server;
 import com.alirace.controller.CommonController;
 import com.alirace.model.Message;
 import com.alirace.model.MessageType;
-import com.alirace.model.Record;
-import com.alirace.util.SerializeUtil;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
@@ -33,11 +31,22 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
         Channel channel = ctx.channel();
 
         Message message = (Message) obj;
+        // log.info("Client->Server: " + channel.remoteAddress() + " " + message.toString());
 
+        // 动态代理
         // 如果是上传数据
         if (MessageType.UPLOAD.getValue() == message.getType()) {
-            Record record = SerializeUtil.deserialize(message.getBody(), Record.class);
-            log.info(record.toString());
+            return;
+        }
+
+        // 如果是进度汇报数据
+        if (MessageType.STATUS.getValue() == message.getType()) {
+            return;
+        }
+
+        // 如果日志流已经上报完, 只等数据回查的话
+        if (MessageType.FINISH.getValue() == message.getType()) {
+            return;
         }
     }
 
@@ -60,18 +69,11 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
         ctx.flush();
     }
 
-    /**
-     * 处理新加的消息通道
-     *
-     * @param ctx
-     * @throws Exception
-     */
     @Override
     public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
         Channel channel = ctx.channel();
         group.add(channel);
-        log.info("Number of machines currently connected to this server: "
-                + group.size() + " " + channel.remoteAddress());
+        log.info(String.format("Now %d client connected to this server, %s", group.size(), channel.remoteAddress()));
         if (group.size() == MACHINE_NUM) {
             // 标记 ready 接口
             CommonController.isReady.set(true);
@@ -79,66 +81,6 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
         }
     }
 
-    /**
-     * 处理退出消息通道
-     *
-     * @param ctx
-     * @throws Exception
-     */
-    @Override
-    public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
-        Channel channel = ctx.channel();
-//        for (Channel ch : group) {
-//            if (ch == channel) {
-//                ch.writeAndFlush("[" + channel.remoteAddress() + "] leaving");
-//            }
-//        }
-        group.remove(channel);
-    }
-
-    /**
-     * 在建立连接时发送消息
-     *
-     * @param ctx
-     * @throws Exception
-     */
-    @Override
-    public void channelActive(ChannelHandlerContext ctx) throws Exception {
-//        Channel channel = ctx.channel();
-//        boolean active = channel.isActive();
-//        if (active) {
-//            System.out.println("[" + channel.remoteAddress() + "] is online");
-//        } else {
-//            System.out.println("[" + channel.remoteAddress() + "] is offline");
-//        }
-//        ctx.writeAndFlush("[server]: welcome");
-//        log.info("Number of machines currently connected to this server: "
-//                + group.size() + " " + channel.remoteAddress());
-    }
-
-    /**
-     * 退出时发送消息
-     *
-     * @param ctx
-     * @throws Exception
-     */
-    @Override
-    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-//        Channel channel = ctx.channel();
-//        if (!channel.isActive()) {
-//            System.out.println("[" + channel.remoteAddress() + "] is offline");
-//        } else {
-//            System.out.println("[" + channel.remoteAddress() + "] is online");
-//        }
-    }
-
-    /**
-     * 异常捕获
-     *
-     * @param ctx
-     * @param e
-     * @throws Exception
-     */
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable e) throws Exception {
         Channel channel = ctx.channel();
