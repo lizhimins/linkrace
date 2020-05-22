@@ -136,7 +136,7 @@ public class ClientService implements Runnable {
         if (future != null && future.channel() != null && future.channel().isActive()) {
             return;
         }
-        future = bootstrap.connect(host, port).sync();
+        future = bootstrap.connect(host, port);
         future.addListener(new ChannelFutureListener() {
             @Override
             public void operationComplete(ChannelFuture future) throws Exception {
@@ -146,7 +146,7 @@ public class ClientService implements Runnable {
                     log.info("Connect to server successfully!");
                     CommonController.isReady.set(true);
                 } else {
-                    log.info("Failed to connect to server, try connect after 1s");
+                    // log.info("Failed to connect to server, try connect after 0ms");
                     future.channel().eventLoop().schedule(new Runnable() {
                         @Override
                         public void run() {
@@ -156,7 +156,7 @@ public class ClientService implements Runnable {
                                 e.printStackTrace();
                             }
                         }
-                    }, 500, TimeUnit.MILLISECONDS);
+                    }, 0, TimeUnit.MILLISECONDS);
                 }
             }
         });

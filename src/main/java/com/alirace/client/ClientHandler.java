@@ -8,6 +8,8 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.alirace.client.ClientService.doConnect;
+
 /**
  * My ClientHandler.
  */
@@ -39,7 +41,7 @@ public class ClientHandler extends SimpleChannelInboundHandler<Object> {
      */
     @Override
     public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-        Channel channel = ctx.channel();
+        // Channel channel = ctx.channel();
         // CommonController.isReady = true;
         // log.info("Client connect to server success...");
     }
@@ -60,8 +62,8 @@ public class ClientHandler extends SimpleChannelInboundHandler<Object> {
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable e) throws Exception {
         Channel channel = ctx.channel();
         System.out.println("[" + channel.remoteAddress() + "] disConnect");
-        e.printStackTrace();
+        // e.printStackTrace();
         ctx.close().sync();
-        // doConnect();
+        doConnect();
     }
 }
