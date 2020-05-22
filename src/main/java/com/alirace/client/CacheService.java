@@ -28,7 +28,7 @@ public class CacheService extends Thread {
     public LinkedBlockingQueue<String> pullQueue = new LinkedBlockingQueue<>(MAX_LENGTH);
 
     // 缓存相关设置
-    public static final int MAX_PULL_CACHE_SIZE = 20 * 1000;
+    public static final int MAX_PULL_CACHE_SIZE = 10 * 1000;
     public static final int MAX_QUERY_CACHE_SIZE = 60 * 1000;
 
     // 查询缓存
@@ -71,9 +71,12 @@ public class CacheService extends Thread {
             String traceId = TraceLog.getTraceId(data);
             preRecord = new Record(traceId);
             preRecord.addTraceLog(data);
-            while (!PullService.isFinish || pullQueue.size() > 0) {
+            while (true) {
                 // take:若队列为空, 发生阻塞, 等待有元素.
                 data = pullQueue.take();
+                if (PullService.EOF.equals(data)) {
+                    break;
+                }
                 traceId = TraceLog.getTraceId(data);
                 if (preRecord.getTraceId().equals(traceId)) {
                     preRecord.addTraceLog(data);
@@ -90,6 +93,7 @@ public class CacheService extends Thread {
                 }
             }
             log.info("Client clean pull cache...");
+            pullCache.invalidateAll();
             pullCache.invalidateAll();
             log.info("All data is checked...");
         } catch (InterruptedException e) {

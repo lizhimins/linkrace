@@ -1,5 +1,6 @@
 package com.alirace.client;
 
+import com.alirace.model.TraceLog;
 import com.alirace.server.ServerService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,11 +31,8 @@ public class PullService implements Runnable {
     // 数据获取地址
     public static String path;
 
-    // 默认没有完成
-    public static boolean isFinish = false;
-
+    public static final String EOF = "EOF";
     public static void start() {
-        isFinish = false;
         Thread thread = new Thread(new PullService(), "PullService");
         thread.start();
     }
@@ -60,7 +58,9 @@ public class PullService implements Runnable {
                 queue.put(line);
             }
         }
-        isFinish = true;
+        for (int i = 0; i < 2; i++) {
+            services.get(i).pullQueue.put(EOF);
+        }
         bf.close();
         input.close();
         log.info("Client pull data finish...");
@@ -75,6 +75,5 @@ public class PullService implements Runnable {
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
-        isFinish = true;
     }
 }

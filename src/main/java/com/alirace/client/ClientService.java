@@ -70,7 +70,7 @@ public class ClientService {
     public static void start() throws InterruptedException {
         log.info("Client initializing start...");
         ClientMonitorService.start();
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < 2; i++) {
             CacheService cacheService = new CacheService();
             cacheService.start();
             services.add(cacheService);
