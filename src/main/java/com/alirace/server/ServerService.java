@@ -5,6 +5,7 @@ import com.alirace.model.Record;
 import com.alirace.netty.MyDecoder;
 import com.alirace.netty.MyEncoder;
 import com.alirace.util.HttpUtil;
+import com.alirace.util.MD5Util;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -17,6 +18,7 @@ import okhttp3.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Iterator;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -32,11 +34,11 @@ public class ServerService implements Runnable {
     public static ConcurrentHashMap<String, String> resultMap = new ConcurrentHashMap(MAX_HASHMAP_SIZE);
 
     // 发出的查询数量 和 收到的响应数量, 需要支持并发
-    public static AtomicInteger queryRequestNum = new AtomicInteger(0);
-    public static AtomicInteger queryResponseNum = new AtomicInteger(0);
+    public static AtomicInteger queryRequestCount = new AtomicInteger(0);
+    public static AtomicInteger queryResponseCount = new AtomicInteger(0);
 
     // 客户端状态机, 已经完成读入任务的机器数量
-    public static AtomicInteger readFinishMachineNum = new AtomicInteger(0);
+    public static AtomicInteger doneMachineCount = new AtomicInteger(0);
     // 监听的端口号
     private static int PORT = 8003;
 
@@ -77,29 +79,19 @@ public class ServerService implements Runnable {
     }
 
     // 结果转移 + 刷盘
-    public static void flushResult(Record record) {
+    public static void flushResult(String traceId, Record record) {
         // log.info(record.toString());
-        // String traceId = record.getTraceId();
-        // Iterator<TraceLog> iterator = record.getLinkedList().iterator();
-//        StringBuffer sb = new StringBuffer();
-//        while (iterator.hasNext()) {
-//            sb.append(iterator.next().toString());
-//            sb.append("\n");
-//            iterator.remove();
-//        }
-//        // String truth = VisualizationCheckSum.resultMap.get(traceId);
-//        String md5 = MD5Util.strToMd5(sb.toString()).toUpperCase();
-        // String ans = md5.equals(truth) ? "Yes" : "No";
-        // log.info(String.format("TraceId: %16s, MD5: %32s, Cal: %32s %3s %d", traceId, truth, md5, ans, count++));
-        // log.info(String.format("TraceId: %16s, MD5: %4s, Cal: %4s %3s %d",
-        //        traceId, truth.substring(0, 4), md5.substring(0, 4), ans, CollectService.totalYes));
-        // if (ans == "Yes") {
-        //     CollectService.totalYes++;
-        // } else {
-        //    log.info(record.toString());
-        // }
-//        resultMap.put(traceId, md5);
-//        CollectService.mergeMap.remove(traceId);
+        Iterator<String> iterator = record.getList().iterator();
+        StringBuffer sb = new StringBuffer();
+        while (iterator.hasNext()) {
+            sb.append(iterator.next().toString());
+            sb.append("\n");
+            iterator.remove();
+        }
+        String md5 = MD5Util.strToMd5(sb.toString()).toUpperCase();
+        log.info(String.format("TraceId: %16s, MD5: %32s, Cal: %32s %3s %d", traceId, md5));
+        resultMap.put(traceId, md5);
+        mergeMap.remove(traceId);
     }
 
     // http 调用上传接口

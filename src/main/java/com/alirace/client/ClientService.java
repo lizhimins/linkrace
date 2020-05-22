@@ -19,10 +19,10 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
-import static com.alirace.client.ClientMonitor.responseCount;
-import static com.alirace.client.ClientMonitor.uploadCount;
+import static com.alirace.client.ClientMonitor.*;
 
 public class ClientService implements Runnable {
 
@@ -49,12 +49,31 @@ public class ClientService implements Runnable {
     // 监听等待池
     public static ConcurrentHashMap<String, Boolean> waitMap = new ConcurrentHashMap<>();
 
+    public static void queryRecord(String traceId) {
+        queryCount.incrementAndGet();
+        // 如果已经存在了
+//        if (waitMap.putIfAbsent(traceId, false)) {
+//            // 计算在哪个队列
+//            int index = traceId.charAt(1) & 0x01;
+//            // 获得记录引用
+//            Record record = services.get(index).pullCache.getIfPresent(traceId);
+//            if (record != null) {
+//                responseRecord(record);
+//            }
+//        } else {
+//            Record record = new Record(traceId);
+//            responseRecord(record);
+//        }
+        Record record = new Record(traceId);
+        responseRecord(record);
+    }
+
     // 上传调用链
     public static void uploadRecord(Record record) {
         uploadCount.incrementAndGet();
         byte[] body = SerializeUtil.serialize(record);
         Message message = new Message(MessageType.UPLOAD.getValue(), body);
-        // future.channel().writeAndFlush(message);
+        future.channel().writeAndFlush(message);
     }
 
     // 查询响应
@@ -62,7 +81,7 @@ public class ClientService implements Runnable {
         responseCount.incrementAndGet();
         byte[] body = SerializeUtil.serialize(record);
         Message message = new Message(MessageType.RESPONSE.getValue(), body);
-        // future.channel().writeAndFlush(message);
+        future.channel().writeAndFlush(message);
     }
 
     public static void start() throws InterruptedException {

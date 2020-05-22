@@ -22,7 +22,7 @@ public class CommonController {
     private static Integer DATA_SOURCE_PORT = 0;
 
     public static Integer getDataSourcePort() {
-        return DATA_SOURCE_PORT;
+        return 8004;
     }
 
     @RequestMapping("/start")

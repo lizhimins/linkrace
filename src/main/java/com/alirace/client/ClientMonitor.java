@@ -37,10 +37,10 @@ public class ClientMonitor implements Runnable {
         StringBuffer sb = new StringBuffer();
 
         sb.append(String.format("offset: %8s, ", logOffset));
-        if (ClientService.services.size() == 2) {
-            sb.append(String.format("CA1: %s,", ClientService.services.get(0).toString()));
-            sb.append(String.format("CA2: %s,", ClientService.services.get(1).toString()));
-        }
+//        if (ClientService.services.size() == 2) {
+//            sb.append(String.format("CA1: %s,", ClientService.services.get(0).toString()));
+//            sb.append(String.format("CA2: %s,", ClientService.services.get(1).toString()));
+//        }
         sb.append("upload: " + String.format("%5s, ", uploadCount.get()));
         sb.append("query: " + String.format("%5s, ", queryCount.get()));
         sb.append("response: " + String.format("%5s, ", responseCount.get()));
