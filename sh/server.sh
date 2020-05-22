@@ -20,6 +20,7 @@ export BASE_DIR=$(dirname $0)/..
 #===========================================================================================
 # JVM Configuration
 #===========================================================================================
+JAVA_OPT="${JAVA_OPT} -Dserver.port=$SERVER_PORT"
 JAVA_OPT="${JAVA_OPT} -server -Xms1536m -Xmx1536m -Xmn320m -XX:MetaspaceSize=128m -XX:MaxMetaspaceSize=320m"
 #JAVA_OPT="${JAVA_OPT} -XX:+UseConcMarkSweepGC -XX:+UseCMSCompactAtFullCollection -XX:CMSInitiatingOccupancyFraction=70 -XX:+CMSParallelRemarkEnabled -XX:SoftRefLRUPolicyMSPerMB=0 -XX:+CMSClassUnloadingEnabled -XX:SurvivorRatio=8  -XX:-UseParNewGC"
 JAVA_OPT="${JAVA_OPT} -XX:+UseG1GC -XX:G1HeapRegionSize=16m -XX:G1ReservePercent=25 -XX:InitiatingHeapOccupancyPercent=30 -XX:SoftRefLRUPolicyMSPerMB=0 -XX:SurvivorRatio=8"
@@ -34,5 +35,5 @@ JAVA_OPT="${JAVA_OPT} -Djava.ext.dirs=${JAVA_HOME}/jre/lib/ext:${BASE_DIR}/lib"
 #JAVA_OPT="${JAVA_OPT} ${JAVA_OPT_EXT}"
 #JAVA_OPT="${JAVA_OPT} -jar ${CLASSPATH}"
 
-java ${JAVA_OPT} -jar LinkTracking-1.0.0.jar $SERVER_PORT
+java ${JAVA_OPT} -jar LinkTracking-1.0.0.jar
 

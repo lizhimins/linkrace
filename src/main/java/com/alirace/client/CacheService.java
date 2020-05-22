@@ -49,22 +49,19 @@ public class CacheService extends Thread {
             .removalListener(((key, value, cause) -> {
                 String traceId = (String) key;
                 Record record = (Record) value;
-                if (record.isError()) {
-                    // 说明原来就有了, 发送一个响应
-                    if (ClientService.waitMap.get(traceId) != null) {
-                        ClientService.response();
-                    }
+                if (ClientService.waitMap.get(traceId) != null) {
                     ClientService.waitMap.put(traceId, true);
-                    ClientService.uploadRecord(record);
+                    ClientService.passRecord(record);
+                    return;
                 } else {
-                    if (ClientService.waitMap.get(traceId) != null) {
+                    if (record.isError()) {
+                        // 当前 traceId 有问题, 需要主动上传
                         ClientService.waitMap.put(traceId, true);
-                        ClientService.passRecord(record);
-                        ClientService.response();
-                    } else {
-                        queryCache.put(traceId, record);
+                        ClientService.uploadRecord(record);
+                        return;
                     }
                 }
+                queryCache.put(traceId, record);
             }))
             .build();;
 
@@ -100,8 +97,8 @@ public class CacheService extends Thread {
             }
             log.info("Client clean pull cache...");
             pullCache.invalidateAll();
-            pullCache.invalidateAll();
             log.info("All data is checked...");
+            ClientService.finish();
         } catch (InterruptedException e) {
             e.printStackTrace();
         }

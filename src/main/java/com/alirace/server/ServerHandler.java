@@ -28,7 +28,7 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
      */
     public static final ChannelGroup group = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE);
     private static final Logger log = LoggerFactory.getLogger(ServerHandler.class);
-    private static final int MACHINE_NUM = 2;
+    private static final int MACHINE_NUM = 4;
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, Object obj) throws Exception {
@@ -64,6 +64,7 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
         }
 
         if (MessageType.PASS.getValue() == message.getType()) {
+            queryResponseCount.incrementAndGet();
             // 反序列化得到数据
             Record record = SerializeUtil.deserialize(message.getBody(), Record.class);
             String traceId = record.getTraceId();
@@ -74,6 +75,10 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
             } else {
                 result.merge(record);
                 ServerService.flushResult(traceId, result);
+            }
+            if (doneMachineCount.get() == MACHINE_NUM
+                    && queryRequestCount.get() == queryResponseCount.get()) {
+                ServerService.uploadData();
             }
             return;
         }
@@ -90,6 +95,7 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
 
         // 如果日志流已经上报完, 只等数据回查的话
         if (MessageType.FINISH.getValue() == message.getType()) {
+            doneMachineCount.incrementAndGet();
             return;
         }
     }

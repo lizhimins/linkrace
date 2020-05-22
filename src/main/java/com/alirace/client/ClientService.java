@@ -51,7 +51,21 @@ public class ClientService implements Runnable {
 
     public static void queryRecord(String traceId) {
         queryCount.incrementAndGet();
-        response();
+        // 已经主动上传过了
+        if (Boolean.TRUE.equals(waitMap.get(traceId))) {
+            response();
+            return;
+        }
+        // 计算在哪个队列
+        int index = traceId.charAt(1) & 0x01;
+        // 获得引用
+        Record record = services.get(index).queryCache.getIfPresent(traceId);
+        if (record != null) {
+            waitMap.put(traceId, true);
+            passRecord(record);
+        } else {
+            waitMap.put(traceId, false);
+        }
     }
 
     // 上传调用链
@@ -75,6 +89,14 @@ public class ClientService implements Runnable {
         responseCount.incrementAndGet();
         byte[] body = "R".getBytes();
         Message message = new Message(MessageType.RESPONSE.getValue(), body);
+        future.channel().writeAndFlush(message);
+    }
+
+    // 读入完成
+    public static void finish() {
+        responseCount.incrementAndGet();
+        byte[] body = "R".getBytes();
+        Message message = new Message(MessageType.FINISH.getValue(), body);
         future.channel().writeAndFlush(message);
     }
 

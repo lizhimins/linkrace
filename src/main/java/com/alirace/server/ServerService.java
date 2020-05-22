@@ -96,6 +96,7 @@ public class ServerService implements Runnable {
 
     // http 调用上传接口
     public static void uploadData() {
+        log.info("Server start upload data...");
         try {
             String result = JSON.toJSONString(resultMap);
             RequestBody body = new FormBody.Builder()
