@@ -20,6 +20,7 @@ public class CommonController {
     public static volatile AtomicBoolean isReady = new AtomicBoolean(false);
     private static final String HOST = "localhost";
     private static Integer DATA_SOURCE_PORT = 0;
+    private static AtomicBoolean isBeginning = new AtomicBoolean(false);
 
     public static Integer getDataSourcePort() {
         return 8004;
@@ -38,10 +39,12 @@ public class CommonController {
     @RequestMapping("/setParameter")
     public String setParamter(@RequestParam Integer port) throws IOException, InterruptedException {
         DATA_SOURCE_PORT = port;
-        // 开始读入数据
-        if (Application.isClientProcess()) {
-            PullService.path = getPath();
-            PullService.start();
+        if (isBeginning.compareAndSet(false, true)) {
+            // 开始读入数据
+            if (Application.isClientProcess()) {
+                PullService.path = getPath();
+                PullService.start();
+            }
         }
         return "suc";
     }

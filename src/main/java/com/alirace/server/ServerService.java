@@ -1,6 +1,7 @@
 package com.alirace.server;
 
 import com.alibaba.fastjson.JSON;
+import com.alirace.controller.CommonController;
 import com.alirace.model.Record;
 import com.alirace.netty.MyDecoder;
 import com.alirace.netty.MyEncoder;
@@ -19,7 +20,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Iterator;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class ServerService implements Runnable {
@@ -39,6 +40,9 @@ public class ServerService implements Runnable {
 
     // 客户端状态机, 已经完成读入任务的机器数量
     public static AtomicInteger doneMachineCount = new AtomicInteger(0);
+
+    public static ExecutorService pool = Executors.newFixedThreadPool(2);
+
     // 监听的端口号
     private static int PORT = 8003;
 
@@ -54,7 +58,7 @@ public class ServerService implements Runnable {
     public static void startNetty() throws Exception {
         log.info("Server start listen at " + PORT);
         EventLoopGroup bossGroup = new NioEventLoopGroup();
-        EventLoopGroup workerGroup = new NioEventLoopGroup(4);
+        EventLoopGroup workerGroup = new NioEventLoopGroup(2);
         try {
             ServerBootstrap bootstrap = new ServerBootstrap();
             bootstrap.group(bossGroup, workerGroup).channel(NioServerSocketChannel.class)
@@ -89,7 +93,7 @@ public class ServerService implements Runnable {
             iterator.remove();
         }
         String md5 = MD5Util.strToMd5(sb.toString()).toUpperCase();
-        log.info(String.format("TraceId: %16s, MD5: %32s", traceId, md5));
+        // log.info(String.format("TraceId: %16s, MD5: %32s", traceId, md5));
         resultMap.put(traceId, md5);
         mergeMap.remove(traceId);
     }
@@ -101,8 +105,7 @@ public class ServerService implements Runnable {
             String result = JSON.toJSONString(resultMap);
             RequestBody body = new FormBody.Builder()
                     .add("result", result).build();
-            String url = String.format("http://localhost:%s/api/finished", "9000");
-            // String url = String.format("http://localhost:%s/api/finished", CommonController.getDataSourcePort());
+            String url = String.format("http://localhost:%s/api/finished", CommonController.getDataSourcePort());
             Request request = new Request.Builder().url(url).post(body).build();
             Response response = HttpUtil.callHttp(request);
             if (response.isSuccessful()) {

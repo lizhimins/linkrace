@@ -1,6 +1,5 @@
 package com.alirace.client;
 
-import com.alirace.model.TraceLog;
 import com.alirace.server.ServerService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,26 +11,22 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.Proxy;
 import java.net.URL;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-import static com.alirace.client.ClientService.*;
+import static com.alirace.client.ClientService.services;
 
 /**
  * 生产者
  */
 public class PullService implements Runnable {
 
+    public static boolean isFinish = false;
+    public static final String EOF = "EOF";
     private static final Logger log = LoggerFactory.getLogger(ServerService.class);
-
     // 数据获取地址
     public static String path;
 
-    public static final String EOF = "EOF";
     public static void start() {
         Thread thread = new Thread(new PullService(), "PullService");
         thread.start();
@@ -61,6 +56,7 @@ public class PullService implements Runnable {
         for (int i = 0; i < 2; i++) {
             services.get(i).pullQueue.put(EOF);
         }
+        isFinish = true;
         bf.close();
         input.close();
         log.info("Client pull data finish...");

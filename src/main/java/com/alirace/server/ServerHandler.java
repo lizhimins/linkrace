@@ -52,34 +52,39 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
                     ch.writeAndFlush(query);
                 }
             }
-            Record result = mergeMap.get(traceId);
-            // 如果当前内存中不包含 traceId 的调用链路就放入内存, 如果存在的话就合并调用链, 然后刷盘
-            if (result == null) {
-                mergeMap.put(traceId, record);
-            } else {
-                result.merge(record);
-                ServerService.flushResult(traceId, result);
-            }
+            pool.execute(new Runnable() {
+                @Override
+                public void run() {
+                    Record result = mergeMap.get(traceId);
+                    // 如果当前内存中不包含 traceId 的调用链路就放入内存, 如果存在的话就合并调用链, 然后刷盘
+                    if (result == null) {
+                        mergeMap.put(traceId, record);
+                    } else {
+                        result.merge(record);
+                        ServerService.flushResult(traceId, result);
+                    }
+                }
+            });
             return;
         }
 
         if (MessageType.PASS.getValue() == message.getType()) {
-            queryResponseCount.incrementAndGet();
-            // 反序列化得到数据
-            Record record = SerializeUtil.deserialize(message.getBody(), Record.class);
-            String traceId = record.getTraceId();
-            // log.info(traceId);
-            Record result = mergeMap.get(traceId);
-            if (result == null) {
-                mergeMap.put(traceId, record);
-            } else {
-                result.merge(record);
-                ServerService.flushResult(traceId, result);
-            }
-            if (doneMachineCount.get() == MACHINE_NUM
-                    && queryRequestCount.get() == queryResponseCount.get()) {
-                ServerService.uploadData();
-            }
+            pool.execute(new Runnable() {
+                @Override
+                public void run() {
+                    // 反序列化得到数据
+                    Record record = SerializeUtil.deserialize(message.getBody(), Record.class);
+                    String traceId = record.getTraceId();
+                    // log.info(traceId);
+                    Record result = mergeMap.get(traceId);
+                    if (result == null) {
+                        mergeMap.put(traceId, record);
+                    } else {
+                        result.merge(record);
+                        ServerService.flushResult(traceId, result);
+                    }
+                }
+            });
             return;
         }
 

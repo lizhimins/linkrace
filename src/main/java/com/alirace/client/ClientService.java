@@ -46,10 +46,12 @@ public class ClientService implements Runnable {
     // 为了尽快消费, 设置两台机器之间同步时间差的阈值, 单位是纳秒, 默认30秒, 越大越快命中率低
     public static final long TIMESTAMP_SYNC_THRESHOLD = 60 * 1000 * 1000L;
 
+    public static LinkedBlockingQueue<Message> uploadQueue = new LinkedBlockingQueue<>();
+
     // 监听等待池
     public static ConcurrentHashMap<String, Boolean> waitMap = new ConcurrentHashMap<>();
 
-    public static void queryRecord(String traceId) {
+    public static void queryRecord(String traceId) throws InterruptedException {
         queryCount.incrementAndGet();
         // 已经主动上传过了
         if (Boolean.TRUE.equals(waitMap.get(traceId))) {
@@ -69,40 +71,47 @@ public class ClientService implements Runnable {
     }
 
     // 上传调用链
-    public static void uploadRecord(Record record) {
+    public static void uploadRecord(Record record) throws InterruptedException {
         uploadCount.incrementAndGet();
         byte[] body = SerializeUtil.serialize(record);
         Message message = new Message(MessageType.UPLOAD.getValue(), body);
         future.channel().writeAndFlush(message);
+        // uploadQueue.put(message);
     }
 
     // 查询结果都用这个上报
-    public static void passRecord(Record record) {
+    public static void passRecord(Record record) throws InterruptedException {
         passCount.incrementAndGet();
         byte[] body = SerializeUtil.serialize(record);
         Message message = new Message(MessageType.PASS.getValue(), body);
         future.channel().writeAndFlush(message);
+        //uploadQueue.put(message);
+        message = new Message(MessageType.RESPONSE.getValue(), body);
+        future.channel().writeAndFlush(message);
+        //uploadQueue.put(message);
     }
 
     // 查询响应
-    public static void response() {
+    public static void response() throws InterruptedException {
         responseCount.incrementAndGet();
         byte[] body = "R".getBytes();
         Message message = new Message(MessageType.RESPONSE.getValue(), body);
         future.channel().writeAndFlush(message);
+        // uploadQueue.put(message);
     }
 
     // 读入完成
-    public static void finish() {
+    public static void finish() throws InterruptedException {
         responseCount.incrementAndGet();
         byte[] body = "R".getBytes();
         Message message = new Message(MessageType.FINISH.getValue(), body);
         future.channel().writeAndFlush(message);
+        // uploadQueue.put(message);
     }
 
     public static void start() throws InterruptedException {
         log.info("Client initializing start...");
-        ClientMonitor.start();
+        // ClientMonitor.start();
         for (int i = 0; i < 2; i++) {
             CacheService cacheService = new CacheService();
             cacheService.start();
@@ -169,5 +178,17 @@ public class ClientService implements Runnable {
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
+//        while (true) {
+//            Message message = uploadQueue.poll();
+//            if (message != null) {
+//                future.channel().writeAndFlush(message);
+//            } else {
+//                try {
+//                    TimeUnit.MILLISECONDS.sleep(1);
+//                } catch (InterruptedException e) {
+//                    e.printStackTrace();
+//                }
+//            }
+//        }
     }
 }
