@@ -63,15 +63,24 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
             return;
         }
 
+        if (MessageType.PASS.getValue() == message.getType()) {
+            // 反序列化得到数据
+            Record record = SerializeUtil.deserialize(message.getBody(), Record.class);
+            String traceId = record.getTraceId();
+            // log.info(traceId);
+            Record result = mergeMap.get(traceId);
+            if (result == null) {
+                mergeMap.put(traceId, record);
+            } else {
+                result.merge(record);
+                ServerService.flushResult(traceId, result);
+            }
+            return;
+        }
+
         // 如果是回复数据
         if (MessageType.RESPONSE.getValue() == message.getType()) {
             queryResponseCount.incrementAndGet();
-//            // 反序列化得到数据
-//            Record record = SerializeUtil.deserialize(message.getBody(), Record.class);
-//            String traceId = record.getTraceId();
-//            Record result = mergeMap.get(traceId);
-//            result.merge(record);
-//            ServerService.flushResult(traceId, result);
             if (doneMachineCount.get() == MACHINE_NUM
                     && queryRequestCount.get() == queryResponseCount.get()) {
                 ServerService.uploadData();

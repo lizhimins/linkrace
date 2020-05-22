@@ -51,21 +51,7 @@ public class ClientService implements Runnable {
 
     public static void queryRecord(String traceId) {
         queryCount.incrementAndGet();
-        // 如果已经存在了
-//        if (waitMap.putIfAbsent(traceId, false)) {
-//            // 计算在哪个队列
-//            int index = traceId.charAt(1) & 0x01;
-//            // 获得记录引用
-//            Record record = services.get(index).pullCache.getIfPresent(traceId);
-//            if (record != null) {
-//                responseRecord(record);
-//            }
-//        } else {
-//            Record record = new Record(traceId);
-//            responseRecord(record);
-//        }
-        Record record = new Record(traceId);
-        responseRecord(record);
+        response();
     }
 
     // 上传调用链
@@ -76,10 +62,18 @@ public class ClientService implements Runnable {
         future.channel().writeAndFlush(message);
     }
 
-    // 查询响应
-    public static void responseRecord(Record record) {
-        responseCount.incrementAndGet();
+    // 查询结果都用这个上报
+    public static void passRecord(Record record) {
+        passCount.incrementAndGet();
         byte[] body = SerializeUtil.serialize(record);
+        Message message = new Message(MessageType.PASS.getValue(), body);
+        future.channel().writeAndFlush(message);
+    }
+
+    // 查询响应
+    public static void response() {
+        responseCount.incrementAndGet();
+        byte[] body = "R".getBytes();
         Message message = new Message(MessageType.RESPONSE.getValue(), body);
         future.channel().writeAndFlush(message);
     }

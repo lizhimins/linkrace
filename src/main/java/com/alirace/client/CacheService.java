@@ -1,5 +1,6 @@
 package com.alirace.client;
 
+import com.alirace.model.Message;
 import com.alirace.model.Record;
 import com.alirace.model.TraceLog;
 import com.alirace.server.ServerService;
@@ -37,6 +38,8 @@ public class CacheService extends Thread {
             .maximumSize(MAX_QUERY_CACHE_SIZE)
             .build();
 
+    private static Record responseNullRecord = new Record("");
+
     // LruCache, 保持对放入数据的引用, 因为入站和上传同时使用
     // Key: traceId
     // Val: timestamp & linkedList<TraceLog>
@@ -46,15 +49,18 @@ public class CacheService extends Thread {
             .removalListener(((key, value, cause) -> {
                 String traceId = (String) key;
                 Record record = (Record) value;
-                if (ClientService.waitMap.get(traceId) != null) {
+                if (record.isError()) {
+                    // 说明原来就有了, 发送一个响应
+                    if (ClientService.waitMap.get(traceId) != null) {
+                        ClientService.response();
+                    }
                     ClientService.waitMap.put(traceId, true);
-                    ClientService.responseRecord(record);
+                    ClientService.uploadRecord(record);
                 } else {
-                    // 当前 traceId 有问题, 需要主动上传
-                    if (record.isError()) {
+                    if (ClientService.waitMap.get(traceId) != null) {
                         ClientService.waitMap.put(traceId, true);
-                        ClientService.uploadRecord(record);
-                        return;
+                        ClientService.passRecord(record);
+                        ClientService.response();
                     } else {
                         queryCache.put(traceId, record);
                     }

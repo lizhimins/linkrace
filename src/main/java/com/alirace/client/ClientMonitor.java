@@ -3,10 +3,13 @@ package com.alirace.client;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Iterator;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static com.alirace.client.ClientService.logOffset;
+import static com.alirace.client.ClientService.waitMap;
 
 public class ClientMonitor implements Runnable {
 
@@ -22,10 +25,8 @@ public class ClientMonitor implements Runnable {
     public static AtomicLong queryCount = new AtomicLong(0L);
     // 被动上报 traceId 数量, 也就是查询数量
     public static AtomicLong responseCount = new AtomicLong(0L);
-    // 主动丢弃 traceId 数量, 第二个LRU淘汰的数据量
-    public static long activeDropCount = 0L;
-    // 被动丢弃 traceId 数量, 根据汇总数据丢弃数据量
-    public static long passiveDropCount = 0L;
+    // 延迟响应数量
+    public static AtomicLong passCount = new AtomicLong(0L);
 
     public static void start() {
         Thread thread = new Thread(new ClientMonitor(), "MonitorService");
@@ -41,22 +42,15 @@ public class ClientMonitor implements Runnable {
 //            sb.append(String.format("CA1: %s,", ClientService.services.get(0).toString()));
 //            sb.append(String.format("CA2: %s,", ClientService.services.get(1).toString()));
 //        }
-        sb.append("upload: " + String.format("%5s, ", uploadCount.get()));
-        sb.append("query: " + String.format("%5s, ", queryCount.get()));
-        sb.append("response: " + String.format("%5s, ", responseCount.get()));
+        sb.append(String.format("upload: %5s, ", uploadCount.get()));
+        sb.append(String.format("query: %5s, ", queryCount.get()));
+        sb.append(String.format("response: %5s, ", responseCount.get()));
+        sb.append(String.format("delay: %5s, ", passCount.get()));
+        sb.append(String.format("waitMap: %5s, ", waitMap.size()));
 
-
-
-//        sb.append("EC: " + String.format("%5s, ", errorCount));
-
-//        sb.append("QC: " + String.format("%5s, ", queryCount.get()));
-//        sb.append("AD: " + String.format("%5s, ", activeDropCount));
-//        sb.append("PD: " + String.format("%5s, ", passiveDropCount));
-//        UploadService.waitMap.forEach(
-//                (key, value) -> {
-//                    sb.append(!value ? key + " " : "");
-//                }
-//        );
+        for (Map.Entry<String, Boolean> entry : waitMap.entrySet()) {
+            sb.append(entry.getValue().equals(false) ? entry.getKey() : "");
+        }
         log.info(sb.toString());
     }
 
