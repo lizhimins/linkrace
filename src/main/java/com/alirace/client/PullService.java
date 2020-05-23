@@ -29,8 +29,7 @@ public class PullService implements Runnable {
     public static String path;
 
     public static void start() {
-        Thread thread = new Thread(new PullService(), "PullService");
-        thread.start();
+        ClientService.pullService.start();
     }
 
     public static void pullData() throws IOException, InterruptedException {

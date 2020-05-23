@@ -1,5 +1,6 @@
 package com.alirace.client;
 
+import com.alirace.controller.CommonController;
 import com.alirace.model.Message;
 import com.alirace.model.MessageType;
 import io.netty.channel.Channel;
@@ -31,6 +32,11 @@ public class ClientHandler extends SimpleChannelInboundHandler<Object> {
             return;
         }
 
+        // 如果收到开始信号请求
+        if (MessageType.START.getValue() == message.getType()) {
+            CommonController.isReady.compareAndSet(false, true);
+            return;
+        }
     }
 
     /**

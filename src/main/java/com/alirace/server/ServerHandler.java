@@ -28,7 +28,8 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
      */
     public static final ChannelGroup group = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE);
     private static final Logger log = LoggerFactory.getLogger(ServerHandler.class);
-    private static final int MACHINE_NUM = 4;
+    private static final int MACHINE_NUM = 2;
+    private static final int SERVICE_NUM = 8;
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, Object obj) throws Exception {
@@ -92,7 +93,7 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
             queryResponseCount.incrementAndGet();
         }
 
-        if (doneMachineCount.get() == MACHINE_NUM
+        if (doneMachineCount.get() == SERVICE_NUM
                 && queryRequestCount.get() == queryResponseCount.get()) {
             ServerService.uploadData();
         }
@@ -128,6 +129,11 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
         group.add(channel);
         log.info(String.format("Now %d client connected to this server, %s", group.size(), channel.remoteAddress()));
         if (group.size() == MACHINE_NUM) {
+            // 向所有机器广播查询请求
+            for (Channel ch : group) {
+                Message query = new Message(MessageType.START.getValue(), "START".getBytes());
+                ch.writeAndFlush(query);
+            }
             // 标记 ready 接口
             CommonController.isReady.set(true);
             log.info("Server start data merge...");

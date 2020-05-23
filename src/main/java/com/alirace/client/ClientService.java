@@ -49,6 +49,8 @@ public class ClientService implements Runnable {
 
     public static LinkedBlockingQueue<Message> uploadQueue = new LinkedBlockingQueue<>();
 
+    public static Thread pullService;
+
     // 监听等待池
     public static ConcurrentHashMap<String, Boolean> waitMap = new ConcurrentHashMap<>();
 
@@ -112,7 +114,7 @@ public class ClientService implements Runnable {
 
     public static void start() throws InterruptedException {
         log.info("Client initializing start...");
-        ClientMonitor.start();
+        // ClientMonitor.start();
         for (int i = 0; i < SERVICE_NUM; i++) {
             CacheService cacheService = new CacheService();
             cacheService.start();
@@ -120,6 +122,7 @@ public class ClientService implements Runnable {
         }
         Thread thread = new Thread(new ClientService(), "ClientService");
         thread.start();
+        pullService = new Thread(new PullService(), "PullService");
     }
 
     public static void startNetty() throws InterruptedException {
@@ -154,7 +157,7 @@ public class ClientService implements Runnable {
                     Channel channel = future.channel();
                     channel.writeAndFlush(new Message(MessageType.STATUS.getValue(), "OK".getBytes())).sync();
                     log.info("Connect to server successfully!");
-                    CommonController.isReady.set(true);
+                    // CommonController.isReady.set(true);
                 } else {
                     // log.info("Failed to connect to server, try connect after 0ms");
                     future.channel().eventLoop().schedule(new Runnable() {
