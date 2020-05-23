@@ -85,23 +85,21 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
                     }
                 }
             });
-            return;
         }
 
         // 如果是回复数据
         if (MessageType.RESPONSE.getValue() == message.getType()) {
             queryResponseCount.incrementAndGet();
-            if (doneMachineCount.get() == MACHINE_NUM
-                    && queryRequestCount.get() == queryResponseCount.get()) {
-                ServerService.uploadData();
-            }
-            return;
+        }
+
+        if (doneMachineCount.get() == MACHINE_NUM
+                && queryRequestCount.get() == queryResponseCount.get()) {
+            ServerService.uploadData();
         }
 
         // 如果日志流已经上报完, 只等数据回查的话
         if (MessageType.FINISH.getValue() == message.getType()) {
             doneMachineCount.incrementAndGet();
-            return;
         }
     }
 
