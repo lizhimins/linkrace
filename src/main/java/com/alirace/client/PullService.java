@@ -14,6 +14,7 @@ import java.net.URL;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
+import static com.alirace.client.ClientService.SERVICE_NUM;
 import static com.alirace.client.ClientService.services;
 
 /**
@@ -43,7 +44,7 @@ public class PullService implements Runnable {
         while ((line = bf.readLine()) != null) {
             if (line.length() > 1) {
                 // 计算在哪个队列
-                int index = line.charAt(1) & 0x01;
+                int index = line.charAt(1) % SERVICE_NUM;
                 // 获得队列引用
                 LinkedBlockingQueue<String> queue = services.get(index).pullQueue;
                 // 队列满的话需要等待
@@ -53,7 +54,7 @@ public class PullService implements Runnable {
                 queue.put(line);
             }
         }
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < SERVICE_NUM; i++) {
             services.get(i).pullQueue.put(EOF);
         }
         isFinish = true;

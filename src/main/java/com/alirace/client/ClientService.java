@@ -28,6 +28,7 @@ public class ClientService implements Runnable {
 
     private static final Logger log = LoggerFactory.getLogger(ServerService.class);
 
+    public static int SERVICE_NUM = 4;
     public static List<CacheService> services = new ArrayList<>();
 
     // Netty 相关配置
@@ -59,7 +60,7 @@ public class ClientService implements Runnable {
             return;
         }
         // 计算在哪个队列
-        int index = traceId.charAt(1) & 0x01;
+        int index = traceId.charAt(1) % SERVICE_NUM;
         // 获得引用
         Record record = services.get(index).queryCache.getIfPresent(traceId);
         if (record != null) {
@@ -111,8 +112,8 @@ public class ClientService implements Runnable {
 
     public static void start() throws InterruptedException {
         log.info("Client initializing start...");
-        // ClientMonitor.start();
-        for (int i = 0; i < 2; i++) {
+        ClientMonitor.start();
+        for (int i = 0; i < SERVICE_NUM; i++) {
             CacheService cacheService = new CacheService();
             cacheService.start();
             services.add(cacheService);

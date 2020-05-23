@@ -8,18 +8,12 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static com.alirace.client.ClientService.logOffset;
-import static com.alirace.client.ClientService.waitMap;
+import static com.alirace.client.ClientService.*;
 
 public class ClientMonitor implements Runnable {
 
     private static final Logger log = LoggerFactory.getLogger(ClientMonitor.class);
 
-    // 当前读入日志的时间戳, 用来进行过滤服务的同步, 这个时间在并发下是非精确的
-    public static long logStartTimestamp = 0L;
-    // 日志错误数据数
-    public static long errorCount = 0L;
-    // 主动上报 traceId 数量, 第一个LRU淘汰的数据量
     public static AtomicLong uploadCount = new AtomicLong(0L);
     // 接收到需要查询的 traceId 数量
     public static AtomicLong queryCount = new AtomicLong(0L);
@@ -38,10 +32,11 @@ public class ClientMonitor implements Runnable {
         StringBuffer sb = new StringBuffer();
 
         sb.append(String.format("offset: %8s, ", logOffset));
-//        if (ClientService.services.size() == 2) {
-//            sb.append(String.format("CA1: %s,", ClientService.services.get(0).toString()));
-//            sb.append(String.format("CA2: %s,", ClientService.services.get(1).toString()));
-//        }
+        if (ClientService.services.size() == SERVICE_NUM) {
+            for (int i = 0; i < SERVICE_NUM; i++) {
+                sb.append(String.format("CA%d: %s,", i, ClientService.services.get(0).toString()));
+            }
+        }
         sb.append(String.format("upload: %5s, ", uploadCount.get()));
         sb.append(String.format("query: %5s, ", queryCount.get()));
         sb.append(String.format("response: %5s, ", responseCount.get()));
@@ -59,7 +54,7 @@ public class ClientMonitor implements Runnable {
         while (true) {
             try {
                 printStatus();
-                TimeUnit.SECONDS.sleep(1);
+                TimeUnit.MILLISECONDS.sleep(100);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
