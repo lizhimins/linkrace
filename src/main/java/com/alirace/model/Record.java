@@ -3,12 +3,8 @@ package com.alirace.model;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedList;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 public class Record {
-
-    // 是否上传过了, 默认没有上传过
-    private volatile static AtomicBoolean isUpload = new AtomicBoolean(false);
 
     // traceId, 用来标记整个链路
     private String traceId;
@@ -19,14 +15,6 @@ public class Record {
 
     public Record(String traceId) {
         this.traceId = traceId;
-    }
-
-    public static AtomicBoolean getIsUpload() {
-        return isUpload;
-    }
-
-    public static void setIsUpload(AtomicBoolean isUpload) {
-        Record.isUpload = isUpload;
     }
 
     public void addTraceLog(String traceLog) {
