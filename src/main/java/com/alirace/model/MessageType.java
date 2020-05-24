@@ -18,7 +18,9 @@ public enum MessageType {
     START((byte) 0x10), // ready
     QUERY((byte) 0x19), // 查询
     SYNC((byte) 0x1A),
-    MONITOR((byte) 0x12);
+
+    MONITOR((byte) 0x12),
+    NO_MORE_UPLOAD((byte) 0x1F);
 
     private byte value;
 

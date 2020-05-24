@@ -29,16 +29,14 @@ public class CacheService extends Thread {
     public LinkedBlockingQueue<String> pullQueue = new LinkedBlockingQueue<>(MAX_LENGTH);
 
     // 缓存相关设置
-    public static final int MAX_PULL_CACHE_SIZE = 2000;
-    public static final int MAX_QUERY_CACHE_SIZE = 60000;
+    public static final int MAX_PULL_CACHE_SIZE = 10000;
+    public static final int MAX_QUERY_CACHE_SIZE = 30000;
 
     // 查询缓存
     public Cache<String, Record> queryCache = Caffeine.newBuilder()
             .initialCapacity(MAX_QUERY_CACHE_SIZE)
             .maximumSize(MAX_QUERY_CACHE_SIZE)
             .build();
-
-    private static Record responseNullRecord = new Record("");
 
     // LruCache, 保持对放入数据的引用, 因为入站和上传同时使用
     // Key: traceId
@@ -106,7 +104,6 @@ public class CacheService extends Thread {
             log.info("Client clean pull cache...");
             pullCache.invalidateAll();
             log.info("All data is checked...");
-            ClientService.finish();
         } catch (InterruptedException e) {
             e.printStackTrace();
         }

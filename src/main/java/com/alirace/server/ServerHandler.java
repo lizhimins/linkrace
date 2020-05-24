@@ -29,8 +29,6 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
      */
     public static final ChannelGroup group = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE);
     private static final Logger log = LoggerFactory.getLogger(ServerHandler.class);
-    private static final int MACHINE_NUM = 2;
-    private static final int TOTAL_NUM = MACHINE_NUM * ClientService.SERVICE_NUM;
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, Object obj) throws Exception {
@@ -91,10 +89,11 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
 
         // 如果是回复数据
         if (MessageType.RESPONSE.getValue() == message.getType()) {
-            queryResponseCount.incrementAndGet();
+            int num = Integer.parseInt(new String(message.getBody()));
+            queryResponseCount.addAndGet(num);
         }
 
-        if (doneMachineCount.get() == TOTAL_NUM
+        if (doneMachineCount.get() == MACHINE_NUM
                 && queryRequestCount.get() == queryResponseCount.get()) {
             ServerService.uploadData();
         }
@@ -102,6 +101,13 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
         // 如果日志流已经上报完, 只等数据回查的话
         if (MessageType.FINISH.getValue() == message.getType()) {
             doneMachineCount.incrementAndGet();
+            // 转发结束信号
+            for (Channel ch : group) {
+                if (ch != channel) {
+                    Message query = new Message(MessageType.NO_MORE_UPLOAD.getValue(), "EOF".getBytes());
+                    ch.writeAndFlush(query);
+                }
+            }
         }
     }
 

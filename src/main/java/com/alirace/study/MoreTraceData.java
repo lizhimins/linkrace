@@ -17,7 +17,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
-public class MoreTraceData extends Thread {
+public class MoreTraceData {
 
     private static final String LOG_SEPARATOR = "|";
 
@@ -60,7 +60,7 @@ public class MoreTraceData extends Thread {
                     String traceLog = logList.get(j);
                     String traceId = TraceLog.getTraceId(traceLog) + i;
                     int index = traceLog.indexOf(LOG_SEPARATOR);
-                    String traceBody = traceLog.substring(index, traceLog.length());
+                    String traceBody = traceLog.substring(index);
                     out.write(traceId + traceBody + "\n");
                 }
             }

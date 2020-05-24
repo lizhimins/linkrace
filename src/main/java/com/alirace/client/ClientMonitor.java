@@ -43,9 +43,9 @@ public class ClientMonitor implements Runnable {
         sb.append(String.format("delay: %5s, ", passCount.get()));
         sb.append(String.format("waitMap: %5s, ", waitMap.size()));
 
-        for (Map.Entry<String, Boolean> entry : waitMap.entrySet()) {
-            sb.append(entry.getValue().equals(false) ? entry.getKey() : "");
-        }
+//        for (Map.Entry<String, Boolean> entry : waitMap.entrySet()) {
+//            sb.append(entry.getValue().equals(false) ? entry.getKey() : "");
+//        }
         log.info(sb.toString());
     }
 

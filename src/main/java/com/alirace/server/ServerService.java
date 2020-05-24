@@ -1,6 +1,7 @@
 package com.alirace.server;
 
 import com.alibaba.fastjson.JSON;
+import com.alirace.client.ClientService;
 import com.alirace.controller.CommonController;
 import com.alirace.model.Record;
 import com.alirace.netty.MyDecoder;
@@ -38,7 +39,9 @@ public class ServerService implements Runnable {
     public static AtomicInteger queryRequestCount = new AtomicInteger(0);
     public static AtomicInteger queryResponseCount = new AtomicInteger(0);
 
-    // 客户端状态机, 已经完成读入任务的机器数量
+    // 客户端机器数量
+    public static final int MACHINE_NUM = 2;
+    // 客户端状态机, 已经完成读入任务的服务
     public static AtomicInteger doneMachineCount = new AtomicInteger(0);
 
     public static ExecutorService pool = Executors.newFixedThreadPool(2);

@@ -57,6 +57,7 @@ public class PullService implements Runnable {
             services.get(i).pullQueue.put(EOF);
         }
         isFinish = true;
+        ClientService.finish();
         bf.close();
         input.close();
         log.info("Client pull data finish...");

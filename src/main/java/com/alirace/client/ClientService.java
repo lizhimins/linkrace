@@ -58,7 +58,7 @@ public class ClientService implements Runnable {
         queryCount.incrementAndGet();
         // 已经主动上传过了
         if (Boolean.TRUE.equals(waitMap.get(traceId))) {
-            response();
+            response(1);
             return;
         }
         // 计算在哪个队列
@@ -89,15 +89,13 @@ public class ClientService implements Runnable {
         Message message = new Message(MessageType.PASS.getValue(), body);
         future.channel().writeAndFlush(message);
         //uploadQueue.put(message);
-        message = new Message(MessageType.RESPONSE.getValue(), body);
-        future.channel().writeAndFlush(message);
-        //uploadQueue.put(message);
+        response(1);
     }
 
     // 查询响应
-    public static void response() throws InterruptedException {
+    public static void response(int num) throws InterruptedException {
         responseCount.incrementAndGet();
-        byte[] body = "R".getBytes();
+        byte[] body = String.valueOf(num).getBytes();
         Message message = new Message(MessageType.RESPONSE.getValue(), body);
         future.channel().writeAndFlush(message);
         // uploadQueue.put(message);

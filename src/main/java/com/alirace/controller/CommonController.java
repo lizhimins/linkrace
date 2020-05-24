@@ -3,6 +3,7 @@ package com.alirace.controller;
 import com.alirace.Application;
 import com.alirace.client.ClientService;
 import com.alirace.client.PullService;
+import com.alirace.study.MoreTraceData;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
