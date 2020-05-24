@@ -94,6 +94,7 @@ public class CacheService extends Thread {
             }
             log.info("Client clean pull cache...");
             pullCache.invalidateAll();
+            ClientService.finish();
             log.info("All data is checked...");
         } catch (InterruptedException e) {
             e.printStackTrace();

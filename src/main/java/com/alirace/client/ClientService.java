@@ -98,7 +98,7 @@ public class ClientService implements Runnable {
     // 读入完成
     public static void finish() throws InterruptedException {
         responseCount.incrementAndGet();
-        byte[] body = "R".getBytes();
+        byte[] body = "finish".getBytes();
         Message message = new Message(MessageType.FINISH.getValue(), body);
         future.channel().writeAndFlush(message);
         // uploadQueue.put(message);

@@ -38,7 +38,7 @@ public class ClientHandler extends SimpleChannelInboundHandler<Object> {
             return;
         }
 
-        // 如果收到开始信号请求
+        // 如果收到结束信号
         if (MessageType.NO_MORE_UPLOAD.getValue() == message.getType()) {
 //            int num = 0;
 //            Iterator<Map.Entry<String, Boolean>> iterator = waitMap.entrySet().iterator();

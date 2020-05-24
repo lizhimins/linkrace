@@ -90,20 +90,19 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
             queryResponseCount.addAndGet(num);
         }
 
-        if (doneMachineCount.get() == MACHINE_NUM
+        // 如果全部的服务都完成了
+        if (doneServicesCount.get() == TOTAL_SERVICES_COUNT
                 && queryRequestCount.get() == queryResponseCount.get()) {
             ServerService.uploadData();
         }
 
         // 如果日志流已经上报完, 只等数据回查的话
         if (MessageType.FINISH.getValue() == message.getType()) {
-            doneMachineCount.incrementAndGet();
-            // 转发结束信号
+            doneServicesCount.incrementAndGet();
+            // 广播结束信号
             for (Channel ch : group) {
-                if (ch != channel) {
-                    Message query = new Message(MessageType.NO_MORE_UPLOAD.getValue(), "EOF".getBytes());
-                    ch.writeAndFlush(query);
-                }
+                Message query = new Message(MessageType.NO_MORE_UPLOAD.getValue(), "EOF".getBytes());
+                ch.writeAndFlush(query);
             }
         }
     }
