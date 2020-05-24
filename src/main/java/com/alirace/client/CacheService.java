@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 客户端核心类, 缓存模块
@@ -37,22 +38,26 @@ public class CacheService extends Thread {
             .removalListener(((key, value, cause) -> {
                 String traceId = (String) key;
                 Record record = (Record) value;
-                if (ClientService.waitMap.get(traceId) != null) {
-                    ClientService.waitMap.put(traceId, true);
-                    try {
-                        ClientService.passRecord(record);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
+                AtomicBoolean flag = ClientService.waitMap.get(traceId);
+                if (flag != null) {
+                    if (flag.compareAndSet(false, true)) {
+                        try {
+                            ClientService.passRecord(record);
+                            ClientService.response(1);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
                     }
                     return;
                 } else {
                     if (record.isError()) {
                         // 当前 traceId 有问题, 需要主动上传
-                        ClientService.waitMap.put(traceId, true);
-                        try {
-                            ClientService.uploadRecord(record);
-                        } catch (InterruptedException e) {
-                            e.printStackTrace();
+                        if (ClientService.waitMap.putIfAbsent(traceId, new AtomicBoolean(true)) == null) {
+                            try {
+                                ClientService.uploadRecord(record);
+                            } catch (InterruptedException e) {
+                                e.printStackTrace();
+                            }
                         }
                         return;
                     }

@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static com.alirace.client.ClientService.*;
@@ -42,8 +43,8 @@ public class ClientMonitor implements Runnable {
         sb.append(String.format("delay: %5s, ", passCount.get()));
         sb.append(String.format("waitMap: %5s, ", waitMap.size()));
         int num = 0;
-        for (Map.Entry<String, Boolean> entry : waitMap.entrySet()) {
-            if (!entry.getValue()) {
+        for (Map.Entry<String, AtomicBoolean> entry : waitMap.entrySet()) {
+            if (!entry.getValue().get()) {
                 num++;
             }
         }

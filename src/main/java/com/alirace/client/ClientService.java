@@ -20,6 +20,8 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.Lock;
 
 import static com.alirace.client.ClientMonitor.*;
 
@@ -46,27 +48,35 @@ public class ClientService implements Runnable {
     public static Thread pullService;
 
     // 监听等待池
-    public static ConcurrentHashMap<String, Boolean> waitMap = new ConcurrentHashMap<>();
+    public static ConcurrentHashMap<String, AtomicBoolean> waitMap = new ConcurrentHashMap<>();
 
     public static void queryRecord(String traceId) throws InterruptedException {
         queryCount.incrementAndGet();
-        // 已经主动上传过了
-        if (Boolean.TRUE.equals(waitMap.get(traceId))) {
-            response(1);
-            return;
-        }
-        // 计算在哪个队列
-        int index = traceId.charAt(1) % SERVICE_NUM;
-        // 获得引用
-        Record record = services.get(index).queryCache.getIfPresent(traceId);
-        if (record != null) {
-            waitMap.put(traceId, true);
-            passRecord(record);
-            response(1);
-        } else {
-            waitMap.put(traceId, false);
-            response(1);
-        }
+        response(1);
+//        // 已经主动上传过了
+//        if (waitMap.get(traceId).get()) {
+//            response(1);
+//            return;
+//        }
+//        // 计算在哪个队列
+//        int index = traceId.charAt(1) % SERVICE_NUM;
+//        // 获得引用
+//        Record record = services.get(index).queryCache.getIfPresent(traceId);
+//        if (record != null) {
+//            // 如果找到了
+//            waitMap.put(traceId, new AtomicBoolean(true));
+//            passRecord(record);
+//            response(1);
+//        } else {
+//            waitMap.putIfAbsent(traceId, new AtomicBoolean(false));
+//            // response(1);
+//        }
+    }
+
+    // 上传读入进度
+    public static void uploadStatus(long logOffset) throws InterruptedException {
+        Message message = new Message(MessageType.STATUS.getValue(), String.valueOf(logOffset).getBytes());
+        future.channel().writeAndFlush(message);
     }
 
     // 上传调用链
@@ -75,7 +85,6 @@ public class ClientService implements Runnable {
         byte[] body = SerializeUtil.serialize(record);
         Message message = new Message(MessageType.UPLOAD.getValue(), body);
         future.channel().writeAndFlush(message);
-        // uploadQueue.put(message);
     }
 
     // 查询结果都用这个上报
@@ -84,7 +93,6 @@ public class ClientService implements Runnable {
         byte[] body = SerializeUtil.serialize(record);
         Message message = new Message(MessageType.PASS.getValue(), body);
         future.channel().writeAndFlush(message);
-        //uploadQueue.put(message);
     }
 
     // 查询响应
@@ -93,7 +101,6 @@ public class ClientService implements Runnable {
         byte[] body = String.valueOf(num).getBytes();
         Message message = new Message(MessageType.RESPONSE.getValue(), body);
         future.channel().writeAndFlush(message);
-        // uploadQueue.put(message);
     }
 
     // 读入完成
@@ -101,16 +108,15 @@ public class ClientService implements Runnable {
         byte[] body = "finish".getBytes();
         Message message = new Message(MessageType.FINISH.getValue(), body);
         future.channel().writeAndFlush(message);
-        // uploadQueue.put(message);
+        // uploadQueue.put(message)x;
     }
 
     // clean map
-    public static void cleanMap() throws InterruptedException {
-        byte[] body = "finish".getBytes();
-        Message message = new Message(MessageType.CLEAN_WAIT_MAP.getValue(), body);
-        future.channel().writeAndFlush(message);
-        // uploadQueue.put(message);
-    }
+//    public static void cleanMap() throws InterruptedException {
+//        byte[] body = "finish".getBytes();
+//        Message message = new Message(MessageType.CLEAN_WAIT_MAP.getValue(), body);
+//        future.channel().writeAndFlush(message);
+//    }
 
     public static void start() throws InterruptedException {
         log.info("Client initializing start...");

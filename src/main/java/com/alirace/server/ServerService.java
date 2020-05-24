@@ -89,6 +89,9 @@ public class ServerService implements Runnable {
 
     // 结果转移 + 刷盘
     public static void flushResult(String traceId, Record record) {
+        if (traceId == null || record == null || record.getList() == null || record.getList().size() == 0) {
+            return;
+        }
         // log.info(record.toString());
         Iterator<String> iterator = record.getList().iterator();
         StringBuffer sb = new StringBuffer();

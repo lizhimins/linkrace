@@ -29,7 +29,7 @@ public class Record {
 
     // 合并日志
     public void merge(Record other) {
-        if (other.getList() == null || other.getList().size() == 0) {
+        if (other == null || other.getList() == null || other.getList().size() == 0) {
             return;
         }
         list.addAll(other.list);

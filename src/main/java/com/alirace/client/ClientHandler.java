@@ -12,9 +12,9 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Iterator;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
-import static com.alirace.client.ClientService.doConnect;
-import static com.alirace.client.ClientService.waitMap;
+import static com.alirace.client.ClientService.*;
 
 /**
  * My ClientHandler.
@@ -43,17 +43,28 @@ public class ClientHandler extends SimpleChannelInboundHandler<Object> {
             return;
         }
 
+        // 如果收到开始信号请求
+        if (MessageType.SYNC.getValue() == message.getType()) {
+//            long self = ClientService.logOffset;
+//            long other = Long.parseLong(new String(message.getBody()));
+//            if (self - other > 100000) {
+//                PullService.sleepTime = self - other;
+//            }
+            return;
+        }
+
         // 如果收到结束信号
         if (MessageType.NO_MORE_UPLOAD.getValue() == message.getType()) {
-            Iterator<Map.Entry<String, Boolean>> iterator = waitMap.entrySet().iterator();
+            Iterator<Map.Entry<String, AtomicBoolean>> iterator = waitMap.entrySet().iterator();
             while (iterator.hasNext()) {
-                Map.Entry<String, Boolean> entry = iterator.next();
-                if (!entry.getValue()) {
+                Map.Entry<String, AtomicBoolean> entry = iterator.next();
+                if (entry.getValue().compareAndSet(true, false)) {
                     Record record = new Record(entry.getKey());
                     ClientService.passRecord(record);
+                    ClientService.response(1);
                 }
             }
-            ClientService.cleanMap();
+            // ClientService.cleanMap();
             return;
         }
     }

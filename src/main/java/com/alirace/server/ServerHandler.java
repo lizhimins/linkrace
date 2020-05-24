@@ -74,6 +74,16 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
             }
         }
 
+        // 如果是进度数据
+        if (MessageType.STATUS.getValue() == message.getType()) {
+            for (Channel ch : group) {
+                if (ch != channel) {
+                    message.setType(MessageType.SYNC.getValue());
+                    ch.writeAndFlush(message);
+                }
+            }
+        }
+
         // 如果是回复数据
         if (MessageType.RESPONSE.getValue() == message.getType()) {
             int num = Integer.parseInt(new String(message.getBody()));
@@ -92,12 +102,12 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
         }
 
         //
-        if (MessageType.CLEAN_WAIT_MAP.getValue() == message.getType()) {
-            if (doneMachineCount.incrementAndGet() == MACHINE_NUM) {
-                log.info("收到两次clean信号");
-                ServerService.uploadData();
-            }
-        }
+//        if (MessageType.CLEAN_WAIT_MAP.getValue() == message.getType()) {
+//            if (doneMachineCount.incrementAndGet() == MACHINE_NUM) {
+//                log.info("收到两次clean信号");
+//                ServerService.uploadData();
+//            }
+//        }
     }
 
     @Override
