@@ -29,8 +29,8 @@ public class CacheService extends Thread {
     public LinkedBlockingQueue<String> pullQueue = new LinkedBlockingQueue<>(MAX_LENGTH);
 
     // 缓存相关设置
-    public static final int MAX_PULL_CACHE_SIZE = 10 * 1000;
-    public static final int MAX_QUERY_CACHE_SIZE = 60 * 1000;
+    public static final int MAX_PULL_CACHE_SIZE = 2000;
+    public static final int MAX_QUERY_CACHE_SIZE = 60000;
 
     // 查询缓存
     public Cache<String, Record> queryCache = Caffeine.newBuilder()

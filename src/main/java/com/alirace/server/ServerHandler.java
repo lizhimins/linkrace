@@ -1,5 +1,6 @@
 package com.alirace.server;
 
+import com.alirace.client.ClientService;
 import com.alirace.controller.CommonController;
 import com.alirace.model.Message;
 import com.alirace.model.MessageType;
@@ -29,7 +30,7 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
     public static final ChannelGroup group = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE);
     private static final Logger log = LoggerFactory.getLogger(ServerHandler.class);
     private static final int MACHINE_NUM = 2;
-    private static final int SERVICE_NUM = 8;
+    private static final int TOTAL_NUM = MACHINE_NUM * ClientService.SERVICE_NUM;
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, Object obj) throws Exception {
@@ -93,7 +94,7 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
             queryResponseCount.incrementAndGet();
         }
 
-        if (doneMachineCount.get() == SERVICE_NUM
+        if (doneMachineCount.get() == TOTAL_NUM
                 && queryRequestCount.get() == queryResponseCount.get()) {
             ServerService.uploadData();
         }
@@ -135,7 +136,7 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
                 ch.writeAndFlush(query);
             }
             // 标记 ready 接口
-            CommonController.isReady.set(true);
+            CommonController.setReady();
             log.info("Server start data merge...");
         }
     }

@@ -34,7 +34,7 @@ public class ClientHandler extends SimpleChannelInboundHandler<Object> {
 
         // 如果收到开始信号请求
         if (MessageType.START.getValue() == message.getType()) {
-            CommonController.isReady.compareAndSet(false, true);
+            CommonController.setReady();
             return;
         }
     }

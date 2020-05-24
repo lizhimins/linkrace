@@ -22,6 +22,15 @@ public class CommonController {
     private static Integer DATA_SOURCE_PORT = 0;
     private static AtomicBoolean isBeginning = new AtomicBoolean(false);
 
+    public static void setReady() {
+//        try {
+//            Thread.sleep(2990);
+//        } catch (InterruptedException e) {
+//            e.printStackTrace();
+//        }
+        isReady.compareAndSet(false, true);
+    }
+
     public static Integer getDataSourcePort() {
         return DATA_SOURCE_PORT;
     }
