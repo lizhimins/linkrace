@@ -1,7 +1,6 @@
 package com.alirace.util;
 
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 
 /**
  * 将字符串装换为 MD5
