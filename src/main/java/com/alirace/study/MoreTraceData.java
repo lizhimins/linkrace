@@ -1,6 +1,5 @@
 package com.alirace.study;
 
-import com.alirace.model.Tag;
 import com.alirace.model.TraceLog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,7 +13,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 
 public class MoreTraceData {

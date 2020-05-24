@@ -2,9 +2,7 @@ package com.alirace.model;
 
 import org.junit.Test;
 
-import java.awt.geom.Area;
-
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
 
 public class RecordTest {
 

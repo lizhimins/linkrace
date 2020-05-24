@@ -1,7 +1,6 @@
 package com.alirace.server;
 
 import com.alibaba.fastjson.JSON;
-import com.alirace.client.ClientService;
 import com.alirace.controller.CommonController;
 import com.alirace.model.Record;
 import com.alirace.netty.MyDecoder;
@@ -21,26 +20,24 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Iterator;
-import java.util.concurrent.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class ServerService implements Runnable {
 
+    // 客户端机器数量
+    public static final int MACHINE_NUM = 2;
     private static final Logger log = LoggerFactory.getLogger(ServerService.class);
-
     // 用来存放待合并的数据 traceId -> record
     private static final int MAX_HASHMAP_SIZE = 1024 * 16;
     public static ConcurrentHashMap<String, Record> mergeMap = new ConcurrentHashMap(MAX_HASHMAP_SIZE);
-
     // 用来存放剩下的数据 traceId -> md5
     public static ConcurrentHashMap<String, String> resultMap = new ConcurrentHashMap(MAX_HASHMAP_SIZE);
-
     // 发出的查询数量 和 收到的响应数量, 需要支持并发
     public static AtomicInteger queryRequestCount = new AtomicInteger(0);
     public static AtomicInteger queryResponseCount = new AtomicInteger(0);
-
-    // 客户端机器数量
-    public static final int MACHINE_NUM = 2;
     // 客户端状态机, 已经完成读入任务的服务
     public static AtomicInteger doneMachineCount = new AtomicInteger(0);
 

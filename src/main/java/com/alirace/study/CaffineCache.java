@@ -1,11 +1,8 @@
 package com.alirace.study;
 
-import com.alirace.model.Record;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 
-import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 public class CaffineCache implements Runnable {

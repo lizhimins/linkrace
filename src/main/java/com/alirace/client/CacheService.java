@@ -1,15 +1,9 @@
 package com.alirace.client;
 
-import com.alirace.model.Message;
 import com.alirace.model.Record;
 import com.alirace.model.TraceLog;
-import com.alirace.server.ServerService;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-import com.github.benmanes.caffeine.cache.RemovalCause;
-import com.github.benmanes.caffeine.cache.RemovalListener;
-import org.checkerframework.checker.nullness.qual.NonNull;
-import org.checkerframework.checker.nullness.qual.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,18 +14,14 @@ import java.util.concurrent.LinkedBlockingQueue;
  */
 public class CacheService extends Thread {
 
-    private static final Logger log = LoggerFactory.getLogger(CacheService.class);
-
     // 阻塞队列最大长度
     public static final int MAX_LENGTH = 500 * 10000;
-
-    // 阻塞队列
-    public LinkedBlockingQueue<String> pullQueue = new LinkedBlockingQueue<>(MAX_LENGTH);
-
     // 缓存相关设置
     public static final int MAX_PULL_CACHE_SIZE = 10000;
     public static final int MAX_QUERY_CACHE_SIZE = 30000;
-
+    private static final Logger log = LoggerFactory.getLogger(CacheService.class);
+    // 阻塞队列
+    public LinkedBlockingQueue<String> pullQueue = new LinkedBlockingQueue<>(MAX_LENGTH);
     // 查询缓存
     public Cache<String, Record> queryCache = Caffeine.newBuilder()
             .initialCapacity(MAX_QUERY_CACHE_SIZE)
@@ -69,7 +59,8 @@ public class CacheService extends Thread {
                 }
                 queryCache.put(traceId, record);
             }))
-            .build();;
+            .build();
+    ;
 
     private Record preRecord;
 

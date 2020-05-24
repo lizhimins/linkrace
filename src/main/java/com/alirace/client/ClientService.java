@@ -1,6 +1,5 @@
 package com.alirace.client;
 
-import com.alirace.controller.CommonController;
 import com.alirace.model.Message;
 import com.alirace.model.MessageType;
 import com.alirace.model.Record;
@@ -26,27 +25,22 @@ import static com.alirace.client.ClientMonitor.*;
 
 public class ClientService implements Runnable {
 
-    private static final Logger log = LoggerFactory.getLogger(ServerService.class);
-
-    public static int SERVICE_NUM = 2;
-    public static List<CacheService> services = new ArrayList<>();
-
-    // Netty 相关配置
-    public static EventLoopGroup workerGroup;
-    public static Bootstrap bootstrap;
-    public static ChannelFuture future;
-
     // 服务器相关信息
     public static final String host = "localhost";
     public static final int port = 8003;
-
-    // 进过过滤服务的日志总量, 单线程调用
-    public static long logOffset = 0L;
     // 每隔多少条上报消费状态, 用来同步消费进度命中更多的缓存
     public static final int READ_FILE_GAP = 10000;
     // 为了尽快消费, 设置两台机器之间同步时间差的阈值, 单位是纳秒, 默认30秒, 越大越快命中率低
     public static final long TIMESTAMP_SYNC_THRESHOLD = 60 * 1000 * 1000L;
-
+    private static final Logger log = LoggerFactory.getLogger(ServerService.class);
+    public static int SERVICE_NUM = 2;
+    public static List<CacheService> services = new ArrayList<>();
+    // Netty 相关配置
+    public static EventLoopGroup workerGroup;
+    public static Bootstrap bootstrap;
+    public static ChannelFuture future;
+    // 进过过滤服务的日志总量, 单线程调用
+    public static long logOffset = 0L;
     public static LinkedBlockingQueue<Message> uploadQueue = new LinkedBlockingQueue<>();
 
     public static Thread pullService;

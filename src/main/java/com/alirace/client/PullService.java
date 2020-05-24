@@ -22,9 +22,9 @@ import static com.alirace.client.ClientService.services;
  */
 public class PullService implements Runnable {
 
-    public static boolean isFinish = false;
     public static final String EOF = "EOF";
     private static final Logger log = LoggerFactory.getLogger(ServerService.class);
+    public static boolean isFinish = false;
     // 数据获取地址
     public static String path;
 

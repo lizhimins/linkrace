@@ -1,6 +1,5 @@
 package com.alirace.server;
 
-import com.alirace.client.ClientService;
 import com.alirace.controller.CommonController;
 import com.alirace.model.Message;
 import com.alirace.model.MessageType;
@@ -14,8 +13,6 @@ import io.netty.channel.group.DefaultChannelGroup;
 import io.netty.util.concurrent.GlobalEventExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.concurrent.TimeUnit;
 
 import static com.alirace.server.ServerService.*;
 
@@ -107,20 +104,6 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
                     Message query = new Message(MessageType.NO_MORE_UPLOAD.getValue(), "EOF".getBytes());
                     ch.writeAndFlush(query);
                 }
-            }
-        }
-    }
-
-    /**
-     * 阻塞, 等待其他机器上线
-     */
-    private void waitAllMachineOnline() {
-        while (group.size() < MACHINE_NUM) {
-            try {
-                // log.info("System waiting...");
-                TimeUnit.SECONDS.sleep(1L);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
             }
         }
     }

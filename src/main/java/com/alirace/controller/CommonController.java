@@ -1,9 +1,7 @@
 package com.alirace.controller;
 
 import com.alirace.Application;
-import com.alirace.client.ClientService;
 import com.alirace.client.PullService;
-import com.alirace.study.MoreTraceData;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -17,9 +15,9 @@ import static com.alirace.Application.CLIENT_PROCESS_PORT2;
 @RestController
 public class CommonController {
 
+    private static final String HOST = "localhost";
     // 程序是否准备完成
     public static volatile AtomicBoolean isReady = new AtomicBoolean(false);
-    private static final String HOST = "localhost";
     private static Integer DATA_SOURCE_PORT = 0;
     private static AtomicBoolean isBeginning = new AtomicBoolean(false);
 
@@ -34,6 +32,19 @@ public class CommonController {
 
     public static Integer getDataSourcePort() {
         return DATA_SOURCE_PORT;
+    }
+
+    private static String getPath() {
+        String port = Application.getSystemPort();
+        if (CLIENT_PROCESS_PORT1.equals(port)) {
+            // return "http://localhost:" + CommonController.getDataSourcePort() + "/trace1.data";
+            return "http://localhost:" + "8004" + "/trace1.data";
+        }
+        if (CLIENT_PROCESS_PORT2.equals(port)) {
+            // return "http://localhost:" + CommonController.getDataSourcePort() + "/trace2.data";
+            return "http://localhost:" + "8004" + "/trace2.data";
+        }
+        return null;
     }
 
     @RequestMapping("/start")
@@ -57,18 +68,5 @@ public class CommonController {
             }
         }
         return "suc";
-    }
-
-    private static String getPath() {
-        String port = Application.getSystemPort();
-        if (CLIENT_PROCESS_PORT1.equals(port)) {
-            // return "http://localhost:" + CommonController.getDataSourcePort() + "/trace1.data";
-            return "http://localhost:" + "8004" + "/trace1.data";
-        }
-        if (CLIENT_PROCESS_PORT2.equals(port)) {
-            // return "http://localhost:" + CommonController.getDataSourcePort() + "/trace2.data";
-            return "http://localhost:" + "8004" + "/trace2.data";
-        }
-        return null;
     }
 }

@@ -1,26 +1,23 @@
 package com.alirace.study;
 
 import com.alibaba.fastjson.JSONObject;
-import com.alirace.model.TraceLog;
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
 
 public class MoreCheckSum {
 
     private static final Logger log = LoggerFactory.getLogger(MoreCheckSum.class);
-
-    private static String resultFileName = "checkSum.data";
-
     // 结果对比用
     public static HashMap<String, String> resultMap = new HashMap<>();
+    private static String resultFileName = "checkSum.data";
 
     public static void main(String[] args) throws Exception {
         readCheckSum();

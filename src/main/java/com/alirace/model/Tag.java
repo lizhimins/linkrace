@@ -1,8 +1,5 @@
 package com.alirace.model;
 
-import java.util.HashMap;
-import java.util.Map;
-
 /**
  * 链路信息中 tag 信息
  */

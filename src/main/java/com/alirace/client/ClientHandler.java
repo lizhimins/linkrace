@@ -9,11 +9,7 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Iterator;
-import java.util.Map;
-
 import static com.alirace.client.ClientService.doConnect;
-import static com.alirace.client.ClientService.waitMap;
 
 /**
  * My ClientHandler.
