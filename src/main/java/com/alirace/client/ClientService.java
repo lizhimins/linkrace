@@ -52,7 +52,7 @@ public class ClientService implements Runnable {
 
     public static void queryRecord(String traceId) throws InterruptedException {
         queryCount.incrementAndGet();
-        response(1);
+//        response(1);
 //        // 已经主动上传过了
 //        if (waitMap.get(traceId).get()) {
 //            response(1);
@@ -69,7 +69,7 @@ public class ClientService implements Runnable {
 //            response(1);
 //        } else {
 //            waitMap.putIfAbsent(traceId, new AtomicBoolean(false));
-//            // response(1);
+//            response(1);
 //        }
     }
 
