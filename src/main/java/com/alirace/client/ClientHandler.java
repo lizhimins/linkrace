@@ -3,13 +3,18 @@ package com.alirace.client;
 import com.alirace.controller.CommonController;
 import com.alirace.model.Message;
 import com.alirace.model.MessageType;
+import com.alirace.model.Record;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Iterator;
+import java.util.Map;
+
 import static com.alirace.client.ClientService.doConnect;
+import static com.alirace.client.ClientService.waitMap;
 
 /**
  * My ClientHandler.
@@ -40,16 +45,15 @@ public class ClientHandler extends SimpleChannelInboundHandler<Object> {
 
         // 如果收到结束信号
         if (MessageType.NO_MORE_UPLOAD.getValue() == message.getType()) {
-//            int num = 0;
-//            Iterator<Map.Entry<String, Boolean>> iterator = waitMap.entrySet().iterator();
-//            while (iterator.hasNext()) {
-//                Map.Entry<String, Boolean> entry = iterator.next();
-//                if (!entry.getValue()) {
-//                    num++;
-//                }
-//            }
-            int num = (int) (ClientMonitor.queryCount.get() - ClientMonitor.responseCount.get());
-            // ClientService.response(num);
+            Iterator<Map.Entry<String, Boolean>> iterator = waitMap.entrySet().iterator();
+            while (iterator.hasNext()) {
+                Map.Entry<String, Boolean> entry = iterator.next();
+                if (!entry.getValue()) {
+                    Record record = new Record(entry.getKey());
+                    ClientService.passRecord(record);
+                }
+            }
+            ClientService.cleanMap();
             return;
         }
     }

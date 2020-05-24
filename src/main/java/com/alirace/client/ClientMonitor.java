@@ -3,6 +3,7 @@ package com.alirace.client;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -29,21 +30,25 @@ public class ClientMonitor implements Runnable {
     private void printStatus() {
         StringBuffer sb = new StringBuffer();
 
-        sb.append(String.format("offset: %8s, ", logOffset));
-        if (ClientService.services.size() == SERVICE_NUM) {
-            for (int i = 0; i < SERVICE_NUM; i++) {
-                sb.append(String.format("CA%d: %s,", i, ClientService.services.get(0).toString()));
-            }
-        }
+//        sb.append(String.format("offset: %8s, ", logOffset));
+//        if (ClientService.services.size() == SERVICE_NUM) {
+//            for (int i = 0; i < SERVICE_NUM; i++) {
+//                sb.append(String.format("CA%d: %s,", i, ClientService.services.get(0).toString()));
+//            }
+//        }
         sb.append(String.format("upload: %5s, ", uploadCount.get()));
         sb.append(String.format("query: %5s, ", queryCount.get()));
         sb.append(String.format("response: %5s, ", responseCount.get()));
         sb.append(String.format("delay: %5s, ", passCount.get()));
         sb.append(String.format("waitMap: %5s, ", waitMap.size()));
+        int num = 0;
+        for (Map.Entry<String, Boolean> entry : waitMap.entrySet()) {
+            if (!entry.getValue()) {
+                num++;
+            }
+        }
 
-//        for (Map.Entry<String, Boolean> entry : waitMap.entrySet()) {
-//            sb.append(entry.getValue().equals(false) ? entry.getKey() : "");
-//        }
+        sb.append(String.format("Map: %d", num));
         log.info(sb.toString());
     }
 

@@ -62,8 +62,10 @@ public class ClientService implements Runnable {
         if (record != null) {
             waitMap.put(traceId, true);
             passRecord(record);
+            response(1);
         } else {
             waitMap.put(traceId, false);
+            response(1);
         }
     }
 
@@ -83,7 +85,6 @@ public class ClientService implements Runnable {
         Message message = new Message(MessageType.PASS.getValue(), body);
         future.channel().writeAndFlush(message);
         //uploadQueue.put(message);
-        response(1);
     }
 
     // 查询响应
@@ -97,9 +98,16 @@ public class ClientService implements Runnable {
 
     // 读入完成
     public static void finish() throws InterruptedException {
-        responseCount.incrementAndGet();
         byte[] body = "finish".getBytes();
         Message message = new Message(MessageType.FINISH.getValue(), body);
+        future.channel().writeAndFlush(message);
+        // uploadQueue.put(message);
+    }
+
+    // clean map
+    public static void cleanMap() throws InterruptedException {
+        byte[] body = "finish".getBytes();
+        Message message = new Message(MessageType.CLEAN_WAIT_MAP.getValue(), body);
         future.channel().writeAndFlush(message);
         // uploadQueue.put(message);
     }

@@ -43,6 +43,8 @@ public class ServerService implements Runnable {
     public static final int TOTAL_SERVICES_COUNT = MACHINE_NUM * 2;
     // 客户端状态机, 已经完成读入任务的服务
     public static AtomicInteger doneServicesCount = new AtomicInteger(0);
+    // 客户端状态机, 结束机器的数量
+    public static AtomicInteger doneMachineCount = new AtomicInteger(0);
 
     public static ExecutorService pool = Executors.newFixedThreadPool(2);
 

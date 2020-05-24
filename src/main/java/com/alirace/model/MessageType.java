@@ -13,6 +13,7 @@ public enum MessageType {
 
     STATUS((byte) 0x0A),
     FINISH((byte) 0x0F),
+    CLEAN_WAIT_MAP((byte) 0x0E),
 
     // 客户端<-服务端
     START((byte) 0x10), // ready
