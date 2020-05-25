@@ -41,23 +41,15 @@ public class CacheService extends Thread {
                 AtomicBoolean flag = ClientService.waitMap.get(traceId);
                 if (flag != null) {
                     if (flag.compareAndSet(false, true)) {
-                        try {
-                            ClientService.passRecord(record);
-                            ClientService.response(1);
-                        } catch (InterruptedException e) {
-                            e.printStackTrace();
-                        }
+                        ClientService.passRecord(record);
+                        ClientService.response(1);
                     }
                     return;
                 } else {
                     if (record.isError()) {
                         // 当前 traceId 有问题, 需要主动上传
                         if (ClientService.waitMap.putIfAbsent(traceId, new AtomicBoolean(true)) == null) {
-                            try {
-                                ClientService.uploadRecord(record);
-                            } catch (InterruptedException e) {
-                                e.printStackTrace();
-                            }
+                            ClientService.uploadRecord(record);
                         }
                         return;
                     }

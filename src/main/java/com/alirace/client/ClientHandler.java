@@ -56,25 +56,7 @@ public class ClientHandler extends SimpleChannelInboundHandler<Object> {
         // 如果收到结束信号
         if (MessageType.NO_MORE_UPLOAD.getValue() == message.getType()) {
             log.info("receive eof signal");
-//            Iterator<Map.Entry<String, AtomicBoolean>> iterator = waitMap.entrySet().iterator();
-//            while (iterator.hasNext()) {
-//                Map.Entry<String, AtomicBoolean> entry = iterator.next();
-//                String traceId = entry.getKey();
-//                AtomicBoolean flag = entry.getValue();
-//                // 如果锁定成功的话
-//                if (flag.compareAndSet(false, true)) {
-//                    // 计算在哪个队列
-//                    int index = traceId.charAt(1) % SERVICE_NUM;
-//                    // 获得引用
-//                    Record record = services.get(index).queryCache.getIfPresent(traceId);
-//                    if (record == null) {
-//                        record = new Record(traceId);
-//                    }
-//                    ClientService.passRecord(record);
-//                    ClientService.response(1);
-//                }
-//            }
-            // ClientService.cleanMap();
+            ClientService.cleanMap();
             return;
         }
     }

@@ -16,7 +16,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -67,21 +69,42 @@ public class ClientService implements Runnable {
             // 获得引用
             Record record = services.get(index).queryCache.getIfPresent(traceId);
             // 如果找到了并且改写结果
-            if (record != null && flag.compareAndSet(false, true)) {
+            if (record != null && waitMap.get(traceId).compareAndSet(false, true)) {
                 // passRecord(record);
                 response(1);
             }
         }
     }
 
+    public static void cleanMap() {
+        Iterator<Map.Entry<String, AtomicBoolean>> iterator = waitMap.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<String, AtomicBoolean> entry = iterator.next();
+            String traceId = entry.getKey();
+            AtomicBoolean flag = entry.getValue();
+            // 如果锁定成功的话
+            if (flag.compareAndSet(false, true)) {
+                // 计算在哪个队列
+                int index = traceId.charAt(1) % SERVICE_NUM;
+                // 获得引用
+                Record record = services.get(index).queryCache.getIfPresent(traceId);
+                if (record == null) {
+                    record = new Record(traceId);
+                }
+                passRecord(record);
+                ClientService.response(1);
+            }
+        }
+    }
+
     // 上传读入进度
-    public static void uploadStatus(long logOffset) throws InterruptedException {
+    public static void uploadStatus(long logOffset) {
         Message message = new Message(MessageType.STATUS.getValue(), String.valueOf(logOffset).getBytes());
         future.channel().writeAndFlush(message);
     }
 
     // 上传调用链
-    public static void uploadRecord(Record record) throws InterruptedException {
+    public static void uploadRecord(Record record) {
         uploadCount.incrementAndGet();
         byte[] body = SerializeUtil.serialize(record);
         Message message = new Message(MessageType.UPLOAD.getValue(), body);
@@ -89,7 +112,7 @@ public class ClientService implements Runnable {
     }
 
     // 查询结果都用这个上报
-    public static void passRecord(Record record) throws InterruptedException {
+    public static void passRecord(Record record) {
         passCount.incrementAndGet();
         byte[] body = SerializeUtil.serialize(record);
         Message message = new Message(MessageType.PASS.getValue(), body);
@@ -97,7 +120,7 @@ public class ClientService implements Runnable {
     }
 
     // 查询响应
-    public static void response(int num) throws InterruptedException {
+    public static void response(int num) {
         responseCount.incrementAndGet();
         byte[] body = String.valueOf(num).getBytes();
         Message message = new Message(MessageType.RESPONSE.getValue(), body);
@@ -105,13 +128,13 @@ public class ClientService implements Runnable {
     }
 
     // 读入完成
-    public static void finish() throws InterruptedException {
+    public static void finish() {
         byte[] body = "finish".getBytes();
         Message message = new Message(MessageType.FINISH.getValue(), body);
         future.channel().writeAndFlush(message);
     }
 
-    public static void start() throws InterruptedException {
+    public static void start() {
         log.info("Client initializing start...");
         ClientMonitor.start();
         for (int i = 0; i < SERVICE_NUM; i++) {
