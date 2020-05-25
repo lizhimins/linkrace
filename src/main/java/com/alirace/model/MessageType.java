@@ -6,21 +6,21 @@ package com.alirace.model;
 public enum MessageType {
 
     // 客户端->服务端
-    UPLOAD((byte) 0x00), // 自己上报的
-    PASS((byte) 0x01),
+    UPLOAD((byte) 0x00), // 主动上传
+    PASS((byte) 0x01), // 被动上传
 
     RESPONSE((byte) 0x09), // 查询响应
 
     STATUS((byte) 0x0A),
     FINISH((byte) 0x0F),
-    CLEAN_WAIT_MAP((byte) 0x0E),
 
     // 客户端<-服务端
     START((byte) 0x10), // ready
+
     QUERY((byte) 0x19), // 查询
+
     SYNC((byte) 0x1A),
 
-    MONITOR((byte) 0x12),
     NO_MORE_UPLOAD((byte) 0x1F);
 
     private byte value;

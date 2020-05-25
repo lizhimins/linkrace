@@ -86,8 +86,10 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
 
         // 如果是回复数据
         if (MessageType.RESPONSE.getValue() == message.getType()) {
-            int num = Integer.parseInt(new String(message.getBody()));
-            queryResponseCount.addAndGet(num);
+            if (queryResponseCount.incrementAndGet() == queryRequestCount.get()
+                    && doneServicesCount.get() == TOTAL_SERVICES_COUNT) {
+                ServerService.uploadData();
+            }
         }
 
         // 如果日志流已经上报完, 只等数据回查的话
@@ -100,14 +102,6 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
                 }
             }
         }
-
-        //
-//        if (MessageType.CLEAN_WAIT_MAP.getValue() == message.getType()) {
-//            if (doneMachineCount.incrementAndGet() == MACHINE_NUM) {
-//                log.info("收到两次clean信号");
-//                ServerService.uploadData();
-//            }
-//        }
     }
 
     @Override

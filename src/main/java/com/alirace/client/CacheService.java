@@ -42,7 +42,7 @@ public class CacheService extends Thread {
                 if (flag != null) {
                     if (flag.compareAndSet(false, true)) {
                         ClientService.passRecord(record);
-                        ClientService.response(1);
+                        ClientService.response();
                     }
                     return;
                 } else {

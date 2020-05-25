@@ -58,7 +58,7 @@ public class ClientService implements Runnable {
         // 已经主动上传过了
         AtomicBoolean flag = waitMap.get(traceId);
         if (flag != null && flag.get()) {
-            response(1);
+            response();
             return;
         }
         // 去等待区进行锁定
@@ -70,8 +70,8 @@ public class ClientService implements Runnable {
             Record record = services.get(index).queryCache.getIfPresent(traceId);
             // 如果找到了并且改写结果
             if (record != null && waitMap.get(traceId).compareAndSet(false, true)) {
-                // passRecord(record);
-                response(1);
+                passRecord(record);
+                response();
             }
         }
     }
@@ -92,7 +92,7 @@ public class ClientService implements Runnable {
                     record = new Record(traceId);
                 }
                 passRecord(record);
-                ClientService.response(1);
+                response();
             }
         }
     }
@@ -120,9 +120,9 @@ public class ClientService implements Runnable {
     }
 
     // 查询响应
-    public static void response(int num) {
+    public static void response() {
         responseCount.incrementAndGet();
-        byte[] body = String.valueOf(num).getBytes();
+        byte[] body = "response".getBytes();
         Message message = new Message(MessageType.RESPONSE.getValue(), body);
         future.channel().writeAndFlush(message);
     }
@@ -149,7 +149,7 @@ public class ClientService implements Runnable {
 
     public static void startNetty() throws InterruptedException {
         log.info("Client Netty doConnect...");
-        workerGroup = new NioEventLoopGroup();
+        workerGroup = new NioEventLoopGroup(2);
         bootstrap = new Bootstrap();
         bootstrap.group(workerGroup)
                 .channel(NioSocketChannel.class)
