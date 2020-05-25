@@ -44,14 +44,12 @@ public class CacheService extends Thread {
                         ClientService.passRecord(record);
                         ClientService.response();
                     }
-                    return;
                 } else {
                     if (record.isError()) {
                         // 当前 traceId 有问题, 需要主动上传
                         if (ClientService.waitMap.putIfAbsent(traceId, new AtomicBoolean(true)) == null) {
                             ClientService.uploadRecord(record);
                         }
-                        return;
                     }
                 }
                 queryCache.put(traceId, record);

@@ -31,7 +31,7 @@ public class ClientMonitor implements Runnable {
     private void printStatus() {
         StringBuffer sb = new StringBuffer();
 
-//        sb.append(String.format("offset: %8s, ", logOffset));
+        sb.append(String.format("offset: %8s, ", logOffset));
 //        if (ClientService.services.size() == SERVICE_NUM) {
 //            for (int i = 0; i < SERVICE_NUM; i++) {
 //                sb.append(String.format("CA%d: %s,", i, ClientService.services.get(0).toString()));

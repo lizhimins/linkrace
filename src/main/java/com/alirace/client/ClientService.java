@@ -1,5 +1,6 @@
 package com.alirace.client;
 
+import com.alirace.controller.CommonController;
 import com.alirace.model.Message;
 import com.alirace.model.MessageType;
 import com.alirace.model.Record;
@@ -46,7 +47,7 @@ public class ClientService implements Runnable {
     // 进过过滤服务的日志总量, 单线程调用
     public static long logOffset = 0L;
     public static LinkedBlockingQueue<Message> uploadQueue = new LinkedBlockingQueue<>();
-
+    public static LinkedBlockingQueue<Message> handlerQueue = new LinkedBlockingQueue<>();
     public static Thread pullService;
 
     // 监听等待池
@@ -56,14 +57,10 @@ public class ClientService implements Runnable {
         queryCount.incrementAndGet();
         // response(1);
         // 已经主动上传过了
-        AtomicBoolean flag = waitMap.get(traceId);
+        AtomicBoolean flag = waitMap.putIfAbsent(traceId, new AtomicBoolean(false));
         if (flag != null && flag.get()) {
             response();
-            return;
-        }
-        // 去等待区进行锁定
-        flag = waitMap.putIfAbsent(traceId, new AtomicBoolean(false));
-        if (flag == null) {
+        } else {
             // 锁定成功, 计算在哪个队列
             int index = traceId.charAt(1) % SERVICE_NUM;
             // 获得引用
@@ -77,22 +74,28 @@ public class ClientService implements Runnable {
     }
 
     public static void cleanMap() {
-        Iterator<Map.Entry<String, AtomicBoolean>> iterator = waitMap.entrySet().iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<String, AtomicBoolean> entry = iterator.next();
-            String traceId = entry.getKey();
-            AtomicBoolean flag = entry.getValue();
-            // 如果锁定成功的话
-            if (flag.compareAndSet(false, true)) {
-                // 计算在哪个队列
-                int index = traceId.charAt(1) % SERVICE_NUM;
-                // 获得引用
-                Record record = services.get(index).queryCache.getIfPresent(traceId);
-                if (record == null) {
-                    record = new Record(traceId);
+        for (int i = 0; i < 10; i++) {
+            log.info("key size:" + waitMap.size());
+            Iterator<String> iterator = waitMap.keySet().iterator();
+            while (iterator.hasNext()) {
+                String traceId = iterator.next();
+                // 如果锁定成功的话
+                if (waitMap.get(traceId).compareAndSet(false, true)) {
+                    // 计算在哪个队列
+                    int index = traceId.charAt(1) % SERVICE_NUM;
+                    // 获得引用
+                    Record record = services.get(index).queryCache.getIfPresent(traceId);
+                    if (record == null) {
+                        record = new Record(traceId);
+                    }
+                    passRecord(record);
+                    response();
                 }
-                passRecord(record);
-                response();
+            }
+            try {
+                TimeUnit.SECONDS.sleep(1);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
             }
         }
     }
@@ -149,7 +152,7 @@ public class ClientService implements Runnable {
 
     public static void startNetty() throws InterruptedException {
         log.info("Client Netty doConnect...");
-        workerGroup = new NioEventLoopGroup(2);
+        workerGroup = new NioEventLoopGroup();
         bootstrap = new Bootstrap();
         bootstrap.group(workerGroup)
                 .channel(NioSocketChannel.class)
@@ -164,6 +167,40 @@ public class ClientService implements Runnable {
                 });
         doConnect();
         // workerGroup.shutdownGracefully();
+    }
+
+    public static void doHandler(Message message) throws Exception {
+        // 动态代理
+        // 如果收到查询请求
+        if (MessageType.QUERY.getValue() == message.getType()) {
+            String traceId = new String(message.getBody());
+            // 调用查询服务上传查询结果
+            ClientService.queryRecord(traceId);
+            return;
+        }
+
+        // 如果收到开始信号请求
+        if (MessageType.START.getValue() == message.getType()) {
+            CommonController.setReady();
+            return;
+        }
+
+        // 如果收到开始信号请求
+        if (MessageType.SYNC.getValue() == message.getType()) {
+//            long self = ClientService.logOffset;
+//            long other = Long.parseLong(new String(message.getBody()));
+//            if (self - other > 100000) {
+//                PullService.sleepTime = self - other;
+//            }
+            return;
+        }
+
+        // 如果收到结束信号
+        if (MessageType.NO_MORE_UPLOAD.getValue() == message.getType()) {
+            log.info("receive eof signal");
+            ClientService.cleanMap();
+            return;
+        }
     }
 
     // 连接到服务器
@@ -203,6 +240,23 @@ public class ClientService implements Runnable {
             startNetty();
         } catch (InterruptedException e) {
             e.printStackTrace();
+        }
+        log.info("startUp");
+        while (true) {
+            Message message = handlerQueue.poll();
+            if (message != null) {
+                try {
+                    doHandler(message);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            } else {
+                try {
+                    TimeUnit.MILLISECONDS.sleep(1);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
         }
 //        while (true) {
 //            Message message = uploadQueue.poll();

@@ -27,38 +27,7 @@ public class ClientHandler extends SimpleChannelInboundHandler<Object> {
     protected void channelRead0(ChannelHandlerContext ctx, Object obj) throws Exception {
         Channel channel = ctx.channel();
         Message message = (Message) obj;
-
-        // 动态代理
-        // 如果收到查询请求
-        if (MessageType.QUERY.getValue() == message.getType()) {
-            String traceId = new String(message.getBody());
-            // 调用查询服务上传查询结果
-            ClientService.queryRecord(traceId);
-            return;
-        }
-
-        // 如果收到开始信号请求
-        if (MessageType.START.getValue() == message.getType()) {
-            CommonController.setReady();
-            return;
-        }
-
-        // 如果收到开始信号请求
-        if (MessageType.SYNC.getValue() == message.getType()) {
-//            long self = ClientService.logOffset;
-//            long other = Long.parseLong(new String(message.getBody()));
-//            if (self - other > 100000) {
-//                PullService.sleepTime = self - other;
-//            }
-            return;
-        }
-
-        // 如果收到结束信号
-        if (MessageType.NO_MORE_UPLOAD.getValue() == message.getType()) {
-            log.info("receive eof signal");
-            ClientService.cleanMap();
-            return;
-        }
+        handlerQueue.put(message);
     }
 
     /**

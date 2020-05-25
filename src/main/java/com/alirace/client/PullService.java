@@ -45,10 +45,10 @@ public class PullService implements Runnable {
         while ((line = bf.readLine()) != null) {
             if (line.length() > 1) {
                 logOffset++;
-//                if (logOffset % 20_000 == 5) {
-//                    ClientService.uploadStatus(logOffset);
-//                    TimeUnit.MICROSECONDS.sleep(sleepTime);
-//                }
+                if (logOffset % 20_000 == 5) {
+                    ClientService.uploadStatus(logOffset);
+                    TimeUnit.MICROSECONDS.sleep(sleepTime);
+                }
                 // 计算在哪个队列
                 int index = line.charAt(1) % SERVICE_NUM;
                 // 获得队列引用
