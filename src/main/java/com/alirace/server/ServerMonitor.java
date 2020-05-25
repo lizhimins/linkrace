@@ -34,7 +34,7 @@ public class ServerMonitor implements Runnable {
         while (true) {
             printStatus();
             try {
-                TimeUnit.MILLISECONDS.sleep(500);
+                TimeUnit.MILLISECONDS.sleep(2000);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }

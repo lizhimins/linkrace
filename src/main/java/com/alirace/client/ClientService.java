@@ -52,25 +52,26 @@ public class ClientService implements Runnable {
 
     public static void queryRecord(String traceId) throws InterruptedException {
         queryCount.incrementAndGet();
-//        response(1);
-//        // 已经主动上传过了
-//        if (waitMap.get(traceId).get()) {
-//            response(1);
-//            return;
-//        }
-//        // 计算在哪个队列
-//        int index = traceId.charAt(1) % SERVICE_NUM;
-//        // 获得引用
-//        Record record = services.get(index).queryCache.getIfPresent(traceId);
-//        if (record != null) {
-//            // 如果找到了
-//            waitMap.put(traceId, new AtomicBoolean(true));
-//            passRecord(record);
-//            response(1);
-//        } else {
-//            waitMap.putIfAbsent(traceId, new AtomicBoolean(false));
-//            response(1);
-//        }
+        // response(1);
+        // 已经主动上传过了
+        AtomicBoolean flag = waitMap.get(traceId);
+        if (flag != null && flag.get()) {
+            response(1);
+            return;
+        }
+        // 去等待区进行锁定
+        flag = waitMap.putIfAbsent(traceId, new AtomicBoolean(false));
+        if (flag == null) {
+            // 锁定成功, 计算在哪个队列
+            int index = traceId.charAt(1) % SERVICE_NUM;
+            // 获得引用
+            Record record = services.get(index).queryCache.getIfPresent(traceId);
+            // 如果找到了并且改写结果
+            if (record != null && flag.compareAndSet(false, true)) {
+                // passRecord(record);
+                response(1);
+            }
+        }
     }
 
     // 上传读入进度
@@ -108,15 +109,7 @@ public class ClientService implements Runnable {
         byte[] body = "finish".getBytes();
         Message message = new Message(MessageType.FINISH.getValue(), body);
         future.channel().writeAndFlush(message);
-        // uploadQueue.put(message)x;
     }
-
-    // clean map
-//    public static void cleanMap() throws InterruptedException {
-//        byte[] body = "finish".getBytes();
-//        Message message = new Message(MessageType.CLEAN_WAIT_MAP.getValue(), body);
-//        future.channel().writeAndFlush(message);
-//    }
 
     public static void start() throws InterruptedException {
         log.info("Client initializing start...");
