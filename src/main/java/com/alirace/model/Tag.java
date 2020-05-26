@@ -17,7 +17,7 @@ public class Tag {
     private static final String ERROR = "error";
 
     // 返回 tag 里面是不是包含错误
-    public static Boolean isError(String tagStr) {
+    public static boolean isError(String tagStr) {
         // 如果为空返回无错误
         if (tagStr == null || tagStr.length() == 0) {
             return false;

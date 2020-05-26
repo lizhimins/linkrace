@@ -1,7 +1,5 @@
 package com.alirace.client;
 
-import com.alirace.model.Message;
-import com.alirace.model.MessageType;
 import com.alirace.server.ServerService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,8 +11,6 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.Proxy;
 import java.net.URL;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
 
 import static com.alirace.client.ClientService.*;
 
@@ -45,19 +41,9 @@ public class PullService implements Runnable {
         while ((line = bf.readLine()) != null) {
             if (line.length() > 1) {
                 logOffset++;
-                if (logOffset % 20_000 == 5) {
-                    ClientService.uploadStatus(logOffset);
-                    TimeUnit.MICROSECONDS.sleep(sleepTime);
-                }
                 // 计算在哪个队列
-                int index = line.charAt(1) % SERVICE_NUM;
-                // 获得队列引用
-                LinkedBlockingQueue<String> queue = services.get(index).pullQueue;
-                // 队列满的话需要等待
-                while (queue.size() >= CacheService.MAX_LENGTH) {
-                    TimeUnit.MILLISECONDS.sleep(1000);
-                }
-                queue.put(line);
+                int index = line.charAt(1) & 0x01;
+                services.get(index).pullQueue.put(line);
             }
         }
         for (int i = 0; i < SERVICE_NUM; i++) {
@@ -66,7 +52,7 @@ public class PullService implements Runnable {
         isFinish = true;
         bf.close();
         input.close();
-        log.info("Client pull data finish...");
+        log.info("Client pull data finish..." + logOffset);
     }
 
     @Override

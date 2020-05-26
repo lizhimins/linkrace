@@ -1,6 +1,5 @@
 package com.alirace.client;
 
-import com.alirace.controller.CommonController;
 import com.alirace.model.Message;
 import com.alirace.model.MessageType;
 import com.alirace.model.Record;
@@ -17,14 +16,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.locks.Lock;
 
 import static com.alirace.client.ClientMonitor.*;
 
@@ -40,6 +36,7 @@ public class ClientService implements Runnable {
     private static final Logger log = LoggerFactory.getLogger(ServerService.class);
     public static int SERVICE_NUM = 2;
     public static List<CacheService> services = new ArrayList<>();
+
     // Netty 相关配置
     public static EventLoopGroup workerGroup;
     public static Bootstrap bootstrap;
@@ -55,50 +52,50 @@ public class ClientService implements Runnable {
 
     public static void queryRecord(String traceId) throws InterruptedException {
         queryCount.incrementAndGet();
-        // response(1);
-        // 已经主动上传过了
-        AtomicBoolean flag = waitMap.putIfAbsent(traceId, new AtomicBoolean(false));
-        if (flag != null && flag.get()) {
-            response();
-        } else {
-            // 锁定成功, 计算在哪个队列
-            int index = traceId.charAt(1) % SERVICE_NUM;
-            // 获得引用
-            Record record = services.get(index).queryCache.getIfPresent(traceId);
-            // 如果找到了并且改写结果
-            if (record != null && waitMap.get(traceId).compareAndSet(false, true)) {
-                passRecord(record);
-                response();
-            }
-        }
+//        // response(1);
+//        // 已经主动上传过了
+//        AtomicBoolean flag = waitMap.putIfAbsent(traceId, new AtomicBoolean(false));
+//        if (flag != null && flag.get()) {
+//            response();
+//        } else {
+//            // 锁定成功, 计算在哪个队列
+//            int index = traceId.charAt(1) % SERVICE_NUM;
+//            // 获得引用
+//            Record record = services.get(index).queryCache.getIfPresent(traceId);
+//            // 如果找到了并且改写结果
+//            if (record != null && waitMap.get(traceId).compareAndSet(false, true)) {
+//                passRecord(record);
+//                response();
+//            }
+//        }
     }
 
-    public static void cleanMap() {
-        for (int i = 0; i < 10; i++) {
-            log.info("key size:" + waitMap.size());
-            Iterator<String> iterator = waitMap.keySet().iterator();
-            while (iterator.hasNext()) {
-                String traceId = iterator.next();
-                // 如果锁定成功的话
-                if (waitMap.get(traceId).compareAndSet(false, true)) {
-                    // 计算在哪个队列
-                    int index = traceId.charAt(1) % SERVICE_NUM;
-                    // 获得引用
-                    Record record = services.get(index).queryCache.getIfPresent(traceId);
-                    if (record == null) {
-                        record = new Record(traceId);
-                    }
-                    passRecord(record);
-                    response();
-                }
-            }
-            try {
-                TimeUnit.SECONDS.sleep(1);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
-    }
+//    public static void cleanMap() {
+//        for (int i = 0; i < 10; i++) {
+//            log.info("key size:" + waitMap.size());
+//            Iterator<String> iterator = waitMap.keySet().iterator();
+//            while (iterator.hasNext()) {
+//                String traceId = iterator.next();
+//                // 如果锁定成功的话
+//                if (waitMap.get(traceId).compareAndSet(false, true)) {
+//                    // 计算在哪个队列
+//                    int index = traceId.charAt(1) % SERVICE_NUM;
+//                    // 获得引用
+//                    Record record = services.get(index).queryCache.getIfPresent(traceId);
+//                    if (record == null) {
+//                        record = new Record(traceId);
+//                    }
+//                    passRecord(record);
+//                    response();
+//                }
+//            }
+//            try {
+//                TimeUnit.SECONDS.sleep(1);
+//            } catch (InterruptedException e) {
+//                e.printStackTrace();
+//            }
+//        }
+//    }
 
     // 上传读入进度
     public static void uploadStatus(long logOffset) {
@@ -142,8 +139,8 @@ public class ClientService implements Runnable {
         ClientMonitor.start();
         for (int i = 0; i < SERVICE_NUM; i++) {
             CacheService cacheService = new CacheService();
-            cacheService.start();
             services.add(cacheService);
+            cacheService.start();
         }
         Thread thread = new Thread(new ClientService(), "ClientService");
         thread.start();
@@ -170,37 +167,7 @@ public class ClientService implements Runnable {
     }
 
     public static void doHandler(Message message) throws Exception {
-        // 动态代理
-        // 如果收到查询请求
-        if (MessageType.QUERY.getValue() == message.getType()) {
-            String traceId = new String(message.getBody());
-            // 调用查询服务上传查询结果
-            ClientService.queryRecord(traceId);
-            return;
-        }
 
-        // 如果收到开始信号请求
-        if (MessageType.START.getValue() == message.getType()) {
-            CommonController.setReady();
-            return;
-        }
-
-        // 如果收到开始信号请求
-        if (MessageType.SYNC.getValue() == message.getType()) {
-//            long self = ClientService.logOffset;
-//            long other = Long.parseLong(new String(message.getBody()));
-//            if (self - other > 100000) {
-//                PullService.sleepTime = self - other;
-//            }
-            return;
-        }
-
-        // 如果收到结束信号
-        if (MessageType.NO_MORE_UPLOAD.getValue() == message.getType()) {
-            log.info("receive eof signal");
-            ClientService.cleanMap();
-            return;
-        }
     }
 
     // 连接到服务器
@@ -223,6 +190,7 @@ public class ClientService implements Runnable {
                         @Override
                         public void run() {
                             try {
+                                TimeUnit.MILLISECONDS.sleep(1000);
                                 doConnect();
                             } catch (InterruptedException e) {
                                 e.printStackTrace();
@@ -241,23 +209,7 @@ public class ClientService implements Runnable {
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
-        log.info("startUp");
-        while (true) {
-            Message message = handlerQueue.poll();
-            if (message != null) {
-                try {
-                    doHandler(message);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            } else {
-                try {
-                    TimeUnit.MILLISECONDS.sleep(1);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
+
 //        while (true) {
 //            Message message = uploadQueue.poll();
 //            if (message != null) {

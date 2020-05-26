@@ -8,7 +8,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static com.alirace.client.ClientService.*;
+import static com.alirace.client.ClientService.logOffset;
+import static com.alirace.client.ClientService.waitMap;
 
 public class ClientMonitor implements Runnable {
 

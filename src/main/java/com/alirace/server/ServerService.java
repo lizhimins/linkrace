@@ -27,6 +27,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class ServerService implements Runnable {
 
+    // 客户端机器数量
+    public static final int MACHINE_NUM = 2;
+    // 总的服务数量
+    public static final int TOTAL_SERVICES_COUNT = MACHINE_NUM * 2;
     private static final Logger log = LoggerFactory.getLogger(ServerService.class);
     // 用来存放待合并的数据 traceId -> record
     private static final int MAX_HASHMAP_SIZE = 1024 * 16;
@@ -36,11 +40,6 @@ public class ServerService implements Runnable {
     // 发出的查询数量 和 收到的响应数量, 需要支持并发
     public static AtomicInteger queryRequestCount = new AtomicInteger(0);
     public static AtomicInteger queryResponseCount = new AtomicInteger(0);
-
-    // 客户端机器数量
-    public static final int MACHINE_NUM = 2;
-    // 总的服务数量
-    public static final int TOTAL_SERVICES_COUNT = MACHINE_NUM * 2;
     // 客户端状态机, 已经完成读入任务的服务
     public static AtomicInteger doneServicesCount = new AtomicInteger(0);
     // 客户端状态机, 结束机器的数量
