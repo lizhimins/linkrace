@@ -31,16 +31,16 @@ JAVA_OPT="${JAVA_OPT} -XX:+OmitStackTraceInFastThrow"
 JAVA_OPT="${JAVA_OPT} -XX:+AlwaysPreTouch"
 JAVA_OPT="${JAVA_OPT} -XX:-UseLargePages"
 JAVA_OPT="${JAVA_OPT} -Djava.ext.dirs=${JAVA_HOME}/jre/lib/ext:${BASE_DIR}/lib"
-JAVA_OPT="${JAVA_OPT} -Djava.rmi.server.hostname=10.66.1.107"
-JAVA_OPT="${JAVA_OPT} -Dcom.sun.management.jmxremote=true"
-JAVA_OPT="${JAVA_OPT} -Dcom.sun.management.jmxremote.ssl=false"
-JAVA_OPT="${JAVA_OPT} -Dcom.sun.management.jmxremote.authenticate=false"
-if [ $SERVER_PORT=="8000" ];
-then
-    JAVA_OPT="${JAVA_OPT} -Dcom.sun.management.jmxremote.port=10800"
-else
-    JAVA_OPT="${JAVA_OPT} -Dcom.sun.management.jmxremote.port=10801"
-fi
+#JAVA_OPT="${JAVA_OPT} -Djava.rmi.server.hostname=10.66.1.107"
+#JAVA_OPT="${JAVA_OPT} -Dcom.sun.management.jmxremote=true"
+#JAVA_OPT="${JAVA_OPT} -Dcom.sun.management.jmxremote.ssl=false"
+#JAVA_OPT="${JAVA_OPT} -Dcom.sun.management.jmxremote.authenticate=false"
+#if [ $SERVER_PORT=="8000" ];
+#then
+#    JAVA_OPT="${JAVA_OPT} -Dcom.sun.management.jmxremote.port=10800"
+#else
+#    JAVA_OPT="${JAVA_OPT} -Dcom.sun.management.jmxremote.port=10801"
+#fi
 #JAVA_OPT="${JAVA_OPT} -Dcom.sun.management.jmxremote.port=10999"
 #JAVA_OPT="${JAVA_OPT} -Xdebug -Xrunjdwp:transport=dt_socket,address=9555,server=y,suspend=n"
 #JAVA_OPT="${JAVA_OPT} ${JAVA_OPT_EXT}"

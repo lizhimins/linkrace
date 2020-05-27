@@ -36,7 +36,7 @@ public class ClientService implements Runnable {
     private static final Logger log = LoggerFactory.getLogger(ServerService.class);
     public static int SERVICE_NUM = 2;
     public static List<CacheService> services = new ArrayList<>();
-
+    public static List<Thread> cacheThreads;
     // Netty 相关配置
     public static EventLoopGroup workerGroup;
     public static Bootstrap bootstrap;
@@ -46,9 +46,6 @@ public class ClientService implements Runnable {
     public static LinkedBlockingQueue<Message> uploadQueue = new LinkedBlockingQueue<>();
     public static LinkedBlockingQueue<Message> handlerQueue = new LinkedBlockingQueue<>();
     public static Thread pullService;
-
-    // 监听等待池
-    public static ConcurrentHashMap<String, AtomicBoolean> waitMap = new ConcurrentHashMap<>();
 
     public static void queryRecord(String traceId) throws InterruptedException {
         queryCount.incrementAndGet();
@@ -139,8 +136,8 @@ public class ClientService implements Runnable {
         ClientMonitor.start();
         for (int i = 0; i < SERVICE_NUM; i++) {
             CacheService cacheService = new CacheService();
-            services.add(cacheService);
             cacheService.start();
+            services.add(cacheService);
         }
         Thread thread = new Thread(new ClientService(), "ClientService");
         thread.start();

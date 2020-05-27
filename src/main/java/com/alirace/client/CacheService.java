@@ -1,11 +1,11 @@
 package com.alirace.client;
 
-import com.alirace.model.Record;
-import com.alirace.model.Tag;
+import com.alirace.model.Node;
 import com.alirace.model.TraceLog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.LinkedHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 
 /**
@@ -13,55 +13,52 @@ import java.util.concurrent.LinkedBlockingQueue;
  */
 public class CacheService extends Thread {
 
-    // 队列最大长度
-    public static final int MAX_LENGTH = 60000;
-    private static final Logger log = LoggerFactory.getLogger(CacheService.class);
     // 阻塞队列
-    public LinkedBlockingQueue<String> pullQueue = new LinkedBlockingQueue<>();
+    public static final int PULL_QUEUE_MAX_LENGTH = 500000;
+    // 缓存分块数量
+    public static final int NODE_NUM = 4096;
+    private static final Logger log = LoggerFactory.getLogger(CacheService.class);
+    public LinkedBlockingQueue<String> pullQueue = new LinkedBlockingQueue<>(PULL_QUEUE_MAX_LENGTH);
+    public LinkedBlockingQueue<String> queryQueue = new LinkedBlockingQueue<>(PULL_QUEUE_MAX_LENGTH);
     // 环状文件缓存
-    public Record[] fileCache = new Record[MAX_LENGTH];
+    public Node[] nodes = new Node[NODE_NUM];
 
-    // 头指针, 尾指针
-    public int head = 0, tail = 0;
+    public CacheService() {
+        super();
+        for (int i = 0; i < NODE_NUM; i++) {
+            nodes[i] = new Node();
+        }
+    }
 
-    public void putRecord(Record record) {
-        fileCache[head] = record;
-        head = (head++) % MAX_LENGTH;
+    @Override
+    public String toString() {
+        StringBuffer sb = new StringBuffer();
+        sb.append(String.format("pull: %6d", pullQueue.size()));
+        return sb.toString();
     }
 
     @Override
     public void run() {
-        Record preRecord = new Record("traceId");
         try {
             while (true) {
                 // take:若队列为空, 发生阻塞, 等待有元素.
-                String data = pullQueue.take();
-                if ("EOF".equals(data)) {
+                String traceLog = pullQueue.take();
+                if ("EOF".equals(traceLog)) {
                     break;
                 }
-
-                String traceId = TraceLog.getTraceId(data);
-                if (preRecord.getTraceId().equals(traceId)) {
-                    preRecord.addTraceLog(data);
-                } else {
-                    Record record = new Record(traceId);
-                    record.addTraceLog(data);
-                    putRecord(record);
-                    preRecord = record;
-                }
-
-                if (!preRecord.isError()) {
-                    boolean flag = Tag.isError(TraceLog.getTag(data));
-                    if (flag) {
-                        preRecord.setError(true);
-
-                    }
+                String traceId = TraceLog.getTraceId(traceLog);
+                int index = Math.abs(traceId.hashCode()) % NODE_NUM;
+                if (nodes[index].putData(traceLog) == -1) {
+                    queryQueue.put(traceId);
                 }
             }
-            log.info("Client clean pull cache...");
+        } catch (InterruptedException ex) {
+            ex.printStackTrace();
+        }
+        log.info("Client LinkedBlockingQueue is Empty...");
 
 
-            //pullCache.invalidateAll();
+        //pullCache.invalidateAll();
 //            Iterator<Map.Entry<String, Record>> iterator = pullCache.asMap().entrySet().iterator();
 //            while (iterator.hasNext()) {
 //                Map.Entry<String, Record> entry = iterator.next();
@@ -85,8 +82,5 @@ public class CacheService extends Thread {
 //            }
 //            ClientService.finish();
 //            log.info("All data is checked...");
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
     }
 }

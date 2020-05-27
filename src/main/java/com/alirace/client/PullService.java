@@ -1,5 +1,6 @@
 package com.alirace.client;
 
+import com.alirace.model.TraceLog;
 import com.alirace.server.ServerService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,7 +37,7 @@ public class PullService implements Runnable {
         URL url = new URL(path);
         HttpURLConnection httpConnection = (HttpURLConnection) url.openConnection(Proxy.NO_PROXY);
         InputStream input = httpConnection.getInputStream();
-        BufferedReader bf = new BufferedReader(new InputStreamReader(input));
+        BufferedReader bf = new BufferedReader(new InputStreamReader(input), 512);
         String line;
         while ((line = bf.readLine()) != null) {
             if (line.length() > 1) {

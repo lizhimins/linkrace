@@ -26,6 +26,8 @@ public class MoreTraceData {
 
     private static int logOffset = 0;
 
+    private static int[] count = new int[40960];
+
     public static void MoreTraceData(String logFileName) {
         // file path
         String basePath = MoreTraceData.class.getResource("/").getPath().substring(1);
@@ -36,7 +38,14 @@ public class MoreTraceData {
             String line = null;
             while ((line = reader.readLine()) != null) {
                 // log.info(line);
-                logList.add(line);
+                // logList.add(line);
+                String traceId = TraceLog.getTraceId(line);
+                int index = Math.abs(traceId.hashCode() % 4096);
+                // System.out.println(index);
+                if (index == 4032) {
+                    logList.add(line);
+                }
+                count[index]++;
             }
         } catch (IOException ioe) {
             log.error(String.valueOf(ioe));
@@ -69,10 +78,31 @@ public class MoreTraceData {
         }
     }
 
+    private static void hashCount() {
+//        for (int i = 0; i < logList.size(); i++) {
+//            String traceLog = logList.get(i);
+//            String traceId = TraceLog.getTraceId(traceLog) + i;
+//            int hash1 = (traceId.indexOf(0) - '0') << 8;
+//            int hash2 = (traceId.indexOf(1) - '0') << 4;
+//            int hash3 = (traceId.indexOf(2) - '0');
+//            int index = hash1 + hash2 + hash3;
+//            count[index]++;
+//        }
+
+        for (int i = 0; i < 4096; i++) {
+            System.out.println(i + ": " + count[i]);
+        }
+
+        for (int i = 0; i < logList.size(); i++) {
+            System.out.println(logList.get(i));
+        }
+    }
+
     public static void main(String[] args) throws IOException {
         // 读取服务
         MoreTraceData("trace1.data");
-        writeTraceData("trace3.data");
+        hashCount();
+        //writeTraceData("trace3.data");
         log.info("traceId num: " + logList.size() + "");
     }
 }
