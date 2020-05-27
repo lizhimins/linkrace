@@ -39,6 +39,7 @@ public class ClientMonitor implements Runnable {
 //                sb.append(String.format("CA%d: %s,", i, ClientService.services.get(i).toString()));
 //            }
 //        }
+        sb.append(String.format("Q: %6d", CacheService.pullQueue.size()));
         sb.append(String.format("error: %8s, ", errorCount.get()));
         sb.append(String.format("upload: %5s, ", uploadCount.get()));
         sb.append(String.format("query: %5s, ", queryCount.get()));

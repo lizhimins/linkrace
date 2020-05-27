@@ -21,6 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static com.alirace.client.ClientMonitor.*;
 
@@ -34,9 +35,7 @@ public class ClientService implements Runnable {
     // 为了尽快消费, 设置两台机器之间同步时间差的阈值, 单位是纳秒, 默认30秒, 越大越快命中率低
     public static final long TIMESTAMP_SYNC_THRESHOLD = 60 * 1000 * 1000L;
     private static final Logger log = LoggerFactory.getLogger(ServerService.class);
-    public static int SERVICE_NUM = 2;
-    public static List<CacheService> services = new ArrayList<>();
-    public static List<Thread> cacheThreads;
+
     // Netty 相关配置
     public static EventLoopGroup workerGroup;
     public static Bootstrap bootstrap;
@@ -134,11 +133,7 @@ public class ClientService implements Runnable {
     public static void start() {
         log.info("Client initializing start...");
         ClientMonitor.start();
-        for (int i = 0; i < SERVICE_NUM; i++) {
-            CacheService cacheService = new CacheService();
-            cacheService.start();
-            services.add(cacheService);
-        }
+        CacheService.start();
         Thread thread = new Thread(new ClientService(), "ClientService");
         thread.start();
         pullService = new Thread(new PullService(), "PullService");

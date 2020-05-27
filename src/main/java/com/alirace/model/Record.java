@@ -7,11 +7,15 @@ import java.util.LinkedList;
 public class Record {
 
     // traceId, 用来标记整个链路
-    private String traceId;
+    public String traceId;
+
+    public int left = 0, right = 0;
+    public boolean isExist = true;
 
     // 懒判断策略, 是否包含错误, 默认为不包含错误, 如果一个调用已经发生错误不需要再次检查
-    private volatile boolean isError = false;
-    private LinkedList<String> list = new LinkedList<>();
+    public boolean isError = false;
+
+    public LinkedList<String> list;
 
     public Record(String traceId) {
         this.traceId = traceId;
@@ -21,15 +25,16 @@ public class Record {
         if (traceLog == null || traceLog.length() == 0) {
             return;
         }
-        if (!isError) {
-            isError = Tag.isError(TraceLog.getTag(traceLog));
+
+        if (list == null) {
+            list = new LinkedList<>();
         }
         list.add(traceLog);
     }
 
     // 合并日志
     public void merge(Record other) {
-        if (other == null || other.getList() == null || other.getList().size() == 0) {
+        if (other == null || other.list == null || other.list.size() == 0) {
             return;
         }
         list.addAll(other.list);
@@ -56,6 +61,30 @@ public class Record {
 
     public void setTraceId(String traceId) {
         this.traceId = traceId;
+    }
+
+    public int getLeft() {
+        return left;
+    }
+
+    public void setLeft(int left) {
+        this.left = left;
+    }
+
+    public int getRight() {
+        return right;
+    }
+
+    public void setRight(int right) {
+        this.right = right;
+    }
+
+    public boolean isExist() {
+        return isExist;
+    }
+
+    public void setExist(boolean exist) {
+        isExist = exist;
     }
 
     public boolean isError() {

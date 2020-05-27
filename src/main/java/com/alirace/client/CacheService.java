@@ -6,20 +6,26 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.LinkedHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 
 /**
  * 客户端核心类, 缓存模块
  */
-public class CacheService extends Thread {
+public class CacheService implements Runnable {
+
+    private static final Logger log = LoggerFactory.getLogger(CacheService.class);
 
     // 阻塞队列
     public static final int PULL_QUEUE_MAX_LENGTH = 500000;
+    public static LinkedBlockingQueue<String> pullQueue = new LinkedBlockingQueue<>(PULL_QUEUE_MAX_LENGTH);
+
+    public static ExecutorService pool = Executors.newFixedThreadPool(2);
+
     // 缓存分块数量
     public static final int NODE_NUM = 4096;
-    private static final Logger log = LoggerFactory.getLogger(CacheService.class);
-    public LinkedBlockingQueue<String> pullQueue = new LinkedBlockingQueue<>(PULL_QUEUE_MAX_LENGTH);
-    public LinkedBlockingQueue<String> queryQueue = new LinkedBlockingQueue<>(PULL_QUEUE_MAX_LENGTH);
+
     // 环状文件缓存
     public Node[] nodes = new Node[NODE_NUM];
 
@@ -30,11 +36,22 @@ public class CacheService extends Thread {
         }
     }
 
+    public static void start() {
+        Thread thread = new Thread(new CacheService(), "CacheService");
+        thread.start();
+    }
+
     @Override
     public String toString() {
         StringBuffer sb = new StringBuffer();
         sb.append(String.format("pull: %6d", pullQueue.size()));
         return sb.toString();
+    }
+
+    public void print() {
+        for (int i = 0; i < NODE_NUM; i++) {
+            log.info(String.format("%d: %s", i, nodes[i].getList()[85]));
+        }
     }
 
     @Override
@@ -46,17 +63,22 @@ public class CacheService extends Thread {
                 if ("EOF".equals(traceLog)) {
                     break;
                 }
-                String traceId = TraceLog.getTraceId(traceLog);
-                int index = Math.abs(traceId.hashCode()) % NODE_NUM;
-                if (nodes[index].putData(traceLog) == -1) {
-                    queryQueue.put(traceId);
-                }
+                pool.submit(new Runnable() {
+                    @Override
+                    public void run() {
+                        ClientService.logOffset++;
+                        String traceId = TraceLog.getTraceId(traceLog);
+                        int index = Math.abs(traceId.hashCode()) % NODE_NUM;
+                        nodes[index].putData(traceLog);
+                    }
+                });
             }
         } catch (InterruptedException ex) {
             ex.printStackTrace();
         }
         log.info("Client LinkedBlockingQueue is Empty...");
 
+        print();
 
         //pullCache.invalidateAll();
 //            Iterator<Map.Entry<String, Record>> iterator = pullCache.asMap().entrySet().iterator();
