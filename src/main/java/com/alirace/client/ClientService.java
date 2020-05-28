@@ -48,8 +48,6 @@ public class ClientService implements Runnable {
 
     // 真实数据
     private static final byte LOG_SEPARATOR = (byte) '|';
-    private static final byte TAG_SEPARATOR = (byte) '&'; // tags 之间的分隔符
-    private static final byte KV_SEPARATOR = (byte) '='; // key:value 分隔符
     private static final byte LINE_SEPARATOR = (byte) '\n'; // key:value 分隔符
     private static final int LENGTH_PER_READ = 0x1 << 13; // 每一次读 8kb
     private static int preOffset = LENGTH_PER_READ; // 上一次处理的偏移
@@ -102,7 +100,7 @@ public class ClientService implements Runnable {
 
                 // 计算桶的索引
                 bucketIndex = StringUtil.byteToHex(bytes, preOffset, preOffset + 5);
-                System.out.print(String.format("Bucket: %d ", bucketIndex));
+                // System.out.print(String.format("Bucket: %d ", bucketIndex));
 
                 for (pos = 0; pos < 16; pos++, nowOffset++) {
                     if (bytes[nowOffset] == LOG_SEPARATOR) {
@@ -110,7 +108,7 @@ public class ClientService implements Runnable {
                     }
                     traceId[pos] = bytes[nowOffset];
                 }
-                System.out.print(StringUtil.byteToString(traceId) + " ");
+                // System.out.print(StringUtil.byteToString(traceId) + " ");
 
                 // 划过中间部分
                 logSeparatorTime = 0;
@@ -128,27 +126,36 @@ public class ClientService implements Runnable {
 
                 nowOffset++;
 
-                // 对 tag 进行检查
+                StringBuffer sb = new StringBuffer();
                 for (; nowOffset <= logOffset; nowOffset++) {
-                    if (bytes[nowOffset] == LINE_SEPARATOR) {
+                    if (LINE_SEPARATOR == bytes[nowOffset]) {
                         break;
                     }
-                    System.out.print((char) (int) bytes[nowOffset]);
+                    // System.out.print((char) (int) bytes[nowOffset]);
+                    // if (nowOffset + 7 > logOffset) {
+                    //    break;
+                    // }
+                    // FIXME: 先写一个暴力吧
+                    sb.append((char) bytes[nowOffset]);
                 }
-
+                // System.out.println(sb.toString());
+                boolean flag = Tag.isError(sb.toString());
+                if (flag) {
+                    System.out.println(String.format("Bucket: %d ", bucketIndex) + "ERROR");
+                }
                 preOffset = ++nowOffset;
-                System.out.println();
+                // System.out.println();
             }
-//            // 如果太长了要从头开始写
-//            if (logOffset >= BYTES_LENGTH) {
-//                // 拷贝末尾的数据
-//                for (int i = 0; i < LENGTH_PER_READ; i++) {
-//                    bytes[i] = bytes[i + BYTES_LENGTH];
-//                }
-//                preOffset -= BYTES_LENGTH;
-//                logOffset -= BYTES_LENGTH;
-//            }
-            break;
+
+            // 如果太长了要从头开始写
+            if (logOffset >= BYTES_LENGTH) {
+                // 拷贝末尾的数据
+                for (int i = 0; i < LENGTH_PER_READ; i++) {
+                    bytes[i] = bytes[i + BYTES_LENGTH];
+                }
+                preOffset -= BYTES_LENGTH;
+                logOffset -= BYTES_LENGTH;
+            }
         }
         log.info("Client pull data finish..." + logOffset);
     }
