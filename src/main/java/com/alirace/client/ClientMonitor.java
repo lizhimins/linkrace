@@ -3,12 +3,10 @@ package com.alirace.client;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static com.alirace.client.ClientService.*;
+import static com.alirace.client.ClientService.getLogOffset;
 
 public class ClientMonitor implements Runnable {
 
@@ -25,19 +23,19 @@ public class ClientMonitor implements Runnable {
     public static AtomicLong errorCount = new AtomicLong(0L);
 
     public static void start() {
+        log.info("MonitorService start...");
         Thread thread = new Thread(new ClientMonitor(), "MonitorService");
         thread.start();
-        log.info("MonitorService start...");
     }
 
     private void printStatus() {
         StringBuffer sb = new StringBuffer();
-        sb.append(String.format("offset: %8s, ", logOffset));
-        sb.append(String.format("error: %8s, ", errorCount.get()));
-        sb.append(String.format("upload: %5s, ", uploadCount.get()));
-        sb.append(String.format("query: %5s, ", queryCount.get()));
-        sb.append(String.format("response: %5s, ", responseCount.get()));
-        sb.append(String.format("delay: %5s, ", passCount.get()));
+        sb.append(String.format("offset: %10s, ", getLogOffset()));
+//        sb.append(String.format("error: %8s, ", errorCount.get()));
+//        sb.append(String.format("upload: %5s, ", uploadCount.get()));
+//        sb.append(String.format("query: %5s, ", queryCount.get()));
+//        sb.append(String.format("response: %5s, ", responseCount.get()));
+//        sb.append(String.format("delay: %5s, ", passCount.get()));
         log.info(sb.toString());
     }
 

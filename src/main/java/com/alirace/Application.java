@@ -47,7 +47,7 @@ public class Application {
             ServerService.start();
         }
         if (isClientProcess()) {
-            ClientService.start();
+            ClientService.init();
         }
     }
 }

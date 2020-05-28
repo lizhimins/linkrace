@@ -1,11 +1,8 @@
 package com.alirace.client;
 
-import com.alirace.model.Message;
-import com.alirace.model.MessageType;
-import com.alirace.model.Record;
+import com.alirace.model.*;
 import com.alirace.netty.MyDecoder;
 import com.alirace.netty.MyEncoder;
-import com.alirace.server.ServerService;
 import com.alirace.util.SerializeUtil;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.*;
@@ -15,40 +12,81 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.Proxy;
+import java.net.URL;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 
 import static com.alirace.client.ClientMonitor.*;
 
 public class ClientService implements Runnable {
 
-    // 服务器相关信息
-    public static final String host = "localhost";
-    public static final int port = 8003;
-    // 每隔多少条上报消费状态, 用来同步消费进度命中更多的缓存
-    public static final int READ_FILE_GAP = 10000;
-    // 为了尽快消费, 设置两台机器之间同步时间差的阈值, 单位是纳秒, 默认30秒, 越大越快命中率低
-    public static final long TIMESTAMP_SYNC_THRESHOLD = 60 * 1000 * 1000L;
-    private static final Logger log = LoggerFactory.getLogger(ServerService.class);
+    private static final Logger log = LoggerFactory.getLogger(ClientService.class);
+
+    // 通信相关参数配置
+    private static final String HOST = "localhost";
+    private static final int PORT = 8003;
 
     // Netty 相关配置
-    public static EventLoopGroup workerGroup;
-    public static Bootstrap bootstrap;
-    public static ChannelFuture future;
+    private static EventLoopGroup workerGroup;
+    private static Bootstrap bootstrap;
+    private static ChannelFuture future;
 
-    // 进过过滤服务的日志总量, 单线程调用
-    public static long logOffset = 0L;
-    public static Thread pullService;
-    public static CacheService[] caches;
+    // 数据获取地址, 由 CommonController 传入
+    private static String path;
 
+    // 精确一次上传
+    private static ConcurrentHashMap<String /*traceId*/, AtomicBoolean /*isUpload*/> waitArea;
+
+    // 真实数据
+    private static int preOffset = 0; // 上一次处理的偏移
+    private static int logOffset = 0; // 当前偏移
+    private static final int LENGTH_PER_READ = 0x01 << 13; // 每一次读 8192 B
+    private static final int BYTES_LENGTH = 0x01 << 30; // 1G = 1024M = 2^30 B
+    private static byte[] bytes = new byte[BYTES_LENGTH];
+
+    // 索引部分
+    private static final int BUCKETS_NUM = 0x01 << 20; // 100万
+    private static Bucket[] buckets = new Bucket[BUCKETS_NUM];
+    private static final int WINDOW_SIZE = 20000; // 窗口大小配置为 2万
+    private static Node[] nodes = new Node[WINDOW_SIZE];
+
+    // 执行线程
+    private static Thread clientService;
+
+
+    public static void pullData() throws IOException {
+        log.info("Client pull data start... Data path: " + path);
+        URL url = new URL(path);
+        HttpURLConnection httpConnection = (HttpURLConnection) url.openConnection(Proxy.NO_PROXY);
+        InputStream input = httpConnection.getInputStream();
+
+        int readCharNum = 0;
+        while (true) {
+            readCharNum = input.read(bytes, logOffset, LENGTH_PER_READ);
+
+            if (readCharNum == -1) {
+                break;
+            } else {
+                logOffset += readCharNum;
+            }
+
+            for (int i = preOffset; i < logOffset; i++) {
+                // TODO:
+            }
+        }
+
+        input.close();
+        log.info("Client pull data finish..." + logOffset);
+    }
+
+    // 查询
     public static void queryRecord(String traceId) throws InterruptedException {
         queryCount.incrementAndGet();
-
     }
 
     // 上传读入进度
@@ -88,16 +126,7 @@ public class ClientService implements Runnable {
         future.channel().writeAndFlush(message);
     }
 
-    public static void start() {
-        log.info("Client initializing start...");
-        ClientMonitor.start();
-        CacheService.start();
-        Thread thread = new Thread(new ClientService(), "ClientService");
-        thread.start();
-        pullService = new Thread(new PullService(), "PullService");
-    }
-
-    public static void startNetty() throws InterruptedException {
+    public static void startNetty() {
         log.info("Client Netty doConnect...");
         workerGroup = new NioEventLoopGroup();
         bootstrap = new Bootstrap();
@@ -116,16 +145,12 @@ public class ClientService implements Runnable {
         // workerGroup.shutdownGracefully();
     }
 
-    public static void doHandler(Message message) throws Exception {
-
-    }
-
     // 连接到服务器
-    public static void doConnect() throws InterruptedException {
+    public static void doConnect() {
         if (future != null && future.channel() != null && future.channel().isActive()) {
             return;
         }
-        future = bootstrap.connect(host, port);
+        future = bootstrap.connect(HOST, PORT);
         future.addListener(new ChannelFutureListener() {
             @Override
             public void operationComplete(ChannelFuture future) throws Exception {
@@ -133,44 +158,52 @@ public class ClientService implements Runnable {
                     Channel channel = future.channel();
                     channel.writeAndFlush(new Message(MessageType.STATUS.getValue(), "OK".getBytes())).sync();
                     log.info("Connect to server successfully!");
-                    // CommonController.isReady.set(true);
                 } else {
-                    // log.info("Failed to connect to server, try connect after 0ms");
+                    // log.info("Failed to connect to server, try connect after 1s.");
                     future.channel().eventLoop().schedule(new Runnable() {
                         @Override
                         public void run() {
-                            try {
-                                TimeUnit.MILLISECONDS.sleep(1000);
-                                doConnect();
-                            } catch (InterruptedException e) {
-                                e.printStackTrace();
-                            }
+                            doConnect();
                         }
-                    }, 0, TimeUnit.MILLISECONDS);
+                    }, 1000, TimeUnit.MILLISECONDS);
                 }
             }
         });
     }
 
+    // 表示初始化
+    public static void init() {
+        log.info("Client initializing start...");
+        // 监控服务
+        ClientMonitor.start();
+        // 初始化数据服务线程
+        clientService = new Thread(new ClientService(), "Client");
+        // 在最后启动 netty 进行通信
+        startNetty();
+    }
+
     @Override
     public void run() {
         try {
-            startNetty();
-        } catch (InterruptedException e) {
+            pullData();
+        } catch (IOException e) {
             e.printStackTrace();
         }
+    }
 
-//        while (true) {
-//            Message message = uploadQueue.poll();
-//            if (message != null) {
-//                future.channel().writeAndFlush(message);
-//            } else {
-//                try {
-//                    TimeUnit.MILLISECONDS.sleep(1);
-//                } catch (InterruptedException e) {
-//                    e.printStackTrace();
-//                }
-//            }
-//        }
+    public static void setPath(String path) {
+        ClientService.path = path;
+    }
+
+    public static Thread getClientService() {
+        return clientService;
+    }
+
+    public static int getPreOffset() {
+        return preOffset;
+    }
+
+    public static int getLogOffset() {
+        return logOffset;
     }
 }
