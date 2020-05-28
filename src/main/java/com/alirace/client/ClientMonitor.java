@@ -32,20 +32,12 @@ public class ClientMonitor implements Runnable {
 
     private void printStatus() {
         StringBuffer sb = new StringBuffer();
-
         sb.append(String.format("offset: %8s, ", logOffset));
-//        if (ClientService.services.size() == SERVICE_NUM) {
-//            for (int i = 0; i < SERVICE_NUM; i++) {
-//                sb.append(String.format("CA%d: %s,", i, ClientService.services.get(i).toString()));
-//            }
-//        }
-        sb.append(String.format("Q: %6d", CacheService.pullQueue.size()));
         sb.append(String.format("error: %8s, ", errorCount.get()));
         sb.append(String.format("upload: %5s, ", uploadCount.get()));
         sb.append(String.format("query: %5s, ", queryCount.get()));
         sb.append(String.format("response: %5s, ", responseCount.get()));
         sb.append(String.format("delay: %5s, ", passCount.get()));
-
         log.info(sb.toString());
     }
 

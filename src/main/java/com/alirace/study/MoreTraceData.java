@@ -26,7 +26,8 @@ public class MoreTraceData {
 
     private static int logOffset = 0;
 
-    private static int[] count = new int[40960];
+    private static final int SIZE = 1024 * 1024;
+    private static int[] count = new int[SIZE];
 
     public static void MoreTraceData(String logFileName) {
         // file path
@@ -40,9 +41,9 @@ public class MoreTraceData {
                 // log.info(line);
                 // logList.add(line);
                 String traceId = TraceLog.getTraceId(line);
-                int index = Math.abs(traceId.hashCode() % 4096);
+                int index = Math.abs(traceId.hashCode() % SIZE);
                 // System.out.println(index);
-                if (index == 4032) {
+                if (index == 909810) {
                     logList.add(line);
                 }
                 count[index]++;
@@ -96,6 +97,15 @@ public class MoreTraceData {
         for (int i = 0; i < logList.size(); i++) {
             System.out.println(logList.get(i));
         }
+
+        int index = 0, max = 0;
+        for (int i = 0; i < SIZE; i++) {
+            if (count[i] > max) {
+                max = count[i];
+                index = i;
+            }
+        }
+        System.out.println(index + " " + max);
     }
 
     public static void main(String[] args) throws IOException {

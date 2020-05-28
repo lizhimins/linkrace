@@ -13,7 +13,6 @@ import java.net.HttpURLConnection;
 import java.net.Proxy;
 import java.net.URL;
 
-import static com.alirace.client.CacheService.pullQueue;
 import static com.alirace.client.ClientService.*;
 
 /**
@@ -41,7 +40,10 @@ public class PullService implements Runnable {
         BufferedReader bf = new BufferedReader(new InputStreamReader(input), 512);
         String line;
         while ((line = bf.readLine()) != null) {
-            pullQueue.put(line);
+            if (line.length() > 1) {
+                ClientService.logOffset++;
+                caches[line.charAt(1) & 0x01].putData(line);
+            }
         }
         isFinish = true;
         bf.close();

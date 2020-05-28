@@ -40,58 +40,16 @@ public class ClientService implements Runnable {
     public static EventLoopGroup workerGroup;
     public static Bootstrap bootstrap;
     public static ChannelFuture future;
+
     // 进过过滤服务的日志总量, 单线程调用
     public static long logOffset = 0L;
-    public static LinkedBlockingQueue<Message> uploadQueue = new LinkedBlockingQueue<>();
-    public static LinkedBlockingQueue<Message> handlerQueue = new LinkedBlockingQueue<>();
     public static Thread pullService;
+    public static CacheService[] caches;
 
     public static void queryRecord(String traceId) throws InterruptedException {
         queryCount.incrementAndGet();
-//        // response(1);
-//        // 已经主动上传过了
-//        AtomicBoolean flag = waitMap.putIfAbsent(traceId, new AtomicBoolean(false));
-//        if (flag != null && flag.get()) {
-//            response();
-//        } else {
-//            // 锁定成功, 计算在哪个队列
-//            int index = traceId.charAt(1) % SERVICE_NUM;
-//            // 获得引用
-//            Record record = services.get(index).queryCache.getIfPresent(traceId);
-//            // 如果找到了并且改写结果
-//            if (record != null && waitMap.get(traceId).compareAndSet(false, true)) {
-//                passRecord(record);
-//                response();
-//            }
-//        }
-    }
 
-//    public static void cleanMap() {
-//        for (int i = 0; i < 10; i++) {
-//            log.info("key size:" + waitMap.size());
-//            Iterator<String> iterator = waitMap.keySet().iterator();
-//            while (iterator.hasNext()) {
-//                String traceId = iterator.next();
-//                // 如果锁定成功的话
-//                if (waitMap.get(traceId).compareAndSet(false, true)) {
-//                    // 计算在哪个队列
-//                    int index = traceId.charAt(1) % SERVICE_NUM;
-//                    // 获得引用
-//                    Record record = services.get(index).queryCache.getIfPresent(traceId);
-//                    if (record == null) {
-//                        record = new Record(traceId);
-//                    }
-//                    passRecord(record);
-//                    response();
-//                }
-//            }
-//            try {
-//                TimeUnit.SECONDS.sleep(1);
-//            } catch (InterruptedException e) {
-//                e.printStackTrace();
-//            }
-//        }
-//    }
+    }
 
     // 上传读入进度
     public static void uploadStatus(long logOffset) {
