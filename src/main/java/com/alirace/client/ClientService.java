@@ -4,6 +4,7 @@ import com.alirace.model.*;
 import com.alirace.netty.MyDecoder;
 import com.alirace.netty.MyEncoder;
 import com.alirace.util.SerializeUtil;
+import com.alirace.util.StringUtil;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -14,9 +15,12 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.Proxy;
 import java.net.URL;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -43,11 +47,16 @@ public class ClientService implements Runnable {
     private static ConcurrentHashMap<String /*traceId*/, AtomicBoolean /*isUpload*/> waitArea;
 
     // 真实数据
-    private static int preOffset = 0; // 上一次处理的偏移
-    private static int logOffset = 0; // 当前偏移
-    private static final int LENGTH_PER_READ = 0x01 << 13; // 每一次读 8192 B
-    private static final int BYTES_LENGTH = 0x01 << 30; // 1G = 1024M = 2^30 B
-    private static byte[] bytes = new byte[BYTES_LENGTH];
+    private static final byte LOG_SEPARATOR = (byte) '|';
+    private static final byte TAG_SEPARATOR = (byte) '&'; // tags 之间的分隔符
+    private static final byte KV_SEPARATOR = (byte) '='; // key:value 分隔符
+    private static final byte LINE_SEPARATOR = (byte) '\n'; // key:value 分隔符
+    private static final int LENGTH_PER_READ = 0x1 << 13; // 每一次读 8kb
+    private static int preOffset = LENGTH_PER_READ; // 上一次处理的偏移
+    private static int nowOffset = LENGTH_PER_READ; // 当前偏移
+    private static int logOffset = LENGTH_PER_READ; // 当前偏移
+    private static final int BYTES_LENGTH = 0x01 << 30;
+    private static byte[] bytes = new byte[BYTES_LENGTH + (0x01 << 13)];
 
     // 索引部分
     private static final int BUCKETS_NUM = 0x01 << 20; // 100万
@@ -58,29 +67,89 @@ public class ClientService implements Runnable {
     // 执行线程
     private static Thread clientService;
 
-
-    public static void pullData() throws IOException {
+    public void pullData() throws IOException {
         log.info("Client pull data start... Data path: " + path);
         URL url = new URL(path);
         HttpURLConnection httpConnection = (HttpURLConnection) url.openConnection(Proxy.NO_PROXY);
         InputStream input = httpConnection.getInputStream();
 
         int readCharNum = 0;
+        int bucketIndex = 0;
+        int logSeparatorTime = 0; // 日志分割符次数
+
+        // 保存 traceId
+        int pos = 0;
+        byte[] traceId = new byte[16];
+
         while (true) {
+
             readCharNum = input.read(bytes, logOffset, LENGTH_PER_READ);
 
+            // 文件结束不处理
             if (readCharNum == -1) {
                 break;
-            } else {
-                logOffset += readCharNum;
             }
 
-            for (int i = preOffset; i < logOffset; i++) {
-                // TODO:
+            // 日志坐标右移
+            logOffset += readCharNum;
+
+            while (nowOffset < logOffset) {
+
+                // 剩余长度过短不处理, 最小长度
+                if (logOffset - nowOffset < 16) {
+                    break;
+                }
+
+                // 计算桶的索引
+                bucketIndex = StringUtil.byteToHex(bytes, preOffset, preOffset + 5);
+                System.out.print(String.format("Bucket: %d ", bucketIndex));
+
+                for (pos = 0; pos < 16; pos++, nowOffset++) {
+                    if (bytes[nowOffset] == LOG_SEPARATOR) {
+                        break;
+                    }
+                    traceId[pos] = bytes[nowOffset];
+                }
+                System.out.print(StringUtil.byteToString(traceId) + " ");
+
+                // 划过中间部分
+                logSeparatorTime = 0;
+                for (; nowOffset <= logOffset; nowOffset++) {
+                    if (bytes[nowOffset] == LOG_SEPARATOR) {
+                        logSeparatorTime++;
+                        if (logSeparatorTime == 8) {
+                            break;
+                        }
+                    }
+                }
+                if (logSeparatorTime != 8) {
+                    continue;
+                }
+
+                nowOffset++;
+
+                // 对 tag 进行检查
+                for (; nowOffset <= logOffset; nowOffset++) {
+                    if (bytes[nowOffset] == LINE_SEPARATOR) {
+                        break;
+                    }
+                    System.out.print((char) (int) bytes[nowOffset]);
+                }
+
+                preOffset = ++nowOffset;
+                System.out.println();
             }
+//            // 如果太长了要从头开始写
+//            if (logOffset >= BYTES_LENGTH) {
+//                // 拷贝末尾的数据
+//                for (int i = 0; i < LENGTH_PER_READ; i++) {
+//                    bytes[i] = bytes[i + BYTES_LENGTH];
+//                }
+//                preOffset -= BYTES_LENGTH;
+//                logOffset -= BYTES_LENGTH;
+//            }
+            break;
         }
-
-        input.close();
         log.info("Client pull data finish..." + logOffset);
     }
 
@@ -175,7 +244,7 @@ public class ClientService implements Runnable {
     public static void init() {
         log.info("Client initializing start...");
         // 监控服务
-        ClientMonitor.start();
+        // ClientMonitor.start();
         // 初始化数据服务线程
         clientService = new Thread(new ClientService(), "Client");
         // 在最后启动 netty 进行通信
