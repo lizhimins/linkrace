@@ -141,7 +141,7 @@ public class ClientService implements Runnable {
                 // System.out.println(sb.toString());
                 boolean flag = Tag.isError(sb.toString());
                 if (flag) {
-                    System.out.println(String.format("Bucket: %d ", bucketIndex) + "ERROR");
+                    // System.out.println(String.format("Bucket: %d ", bucketIndex) + "ERROR");
                 }
                 preOffset = ++nowOffset;
                 // System.out.println();
