@@ -13,9 +13,6 @@ public class AhoCorasickAutomation {
     /*待查找的目标字符串集合*/
     private static List<String> target = new ArrayList<String>();
 
-    /*表示在文本字符串中查找的结果，key表示目标字符串， value表示目标字符串在文本串出现的位置*/
-    private HashMap<String, List<Integer>> result;
-
     /*内部静态类，用于表示AC自动机的每个结点，在每个结点中我们并没有存储该结点对应的字符*/
     private static class Node {
         /*如果该结点是一个终点，即，从根结点到此结点表示了一个目标字符串，则str != null, 且str就表示该字符串*/
@@ -31,8 +28,12 @@ public class AhoCorasickAutomation {
     }
 
     static {
-        target.add("http.status_code=");
-        target.add("error=");
+        target.add("|http.status_code=");
+        target.add("&http.status_code=");
+        target.add("|error=1&");
+        target.add("&error=1&");
+        target.add("|error=1\n");
+        target.add("&error=1\n");
         buildTrieTree();
         build_AC_FromTrie();
     }
@@ -42,7 +43,7 @@ public class AhoCorasickAutomation {
         for (String targetStr : target) {
             Node curr = root;
             for (int i = 0; i < targetStr.length(); i++) {
-                char ch = targetStr.charAt(i);
+                byte ch = (byte) targetStr.charAt(i);
                 if (curr.table[ch] == null) {
                     curr.table[ch] = new Node();
                 }
@@ -98,7 +99,7 @@ public class AhoCorasickAutomation {
     /*在文本串中查找所有的目标字符串*/
     public HashMap<String, List<Integer>> find(String text) {
         /*创建一个表示存储结果的对象*/
-        result = new HashMap<String, List<Integer>>();
+        HashMap<String, List<Integer>> result = new HashMap();
         for (String s : target) {
             result.put(s, new LinkedList<Integer>());
         }
@@ -106,7 +107,7 @@ public class AhoCorasickAutomation {
         int i = 0;
         while (i < text.length()) {
             /*文本串中的字符*/
-            char ch = text.charAt(i);
+            byte ch = (byte) (int) text.charAt(i);
             /*文本串中的字符和AC自动机中的字符进行比较*/
             if (curr.table[ch] != null) {
                 /*若相等，自动机进入下一状态*/
@@ -135,29 +136,67 @@ public class AhoCorasickAutomation {
         return result;
     }
 
+    /**
+     * 正数 正确
+     * 0 粘包
+     * 负数 错误
+     * 绝对值为 \n 的 offset
+     */
     /*在文本串中查找所有的目标字符串*/
-    public HashMap<String, List<Integer>> find(byte[] bytes, int offset) {
-        /*创建一个表示存储结果的对象*/
-        result = new HashMap<String, List<Integer>>();
-        for (String s : target) {
-            result.put(s, new LinkedList<Integer>());
-        }
+    public static int find(byte[] bytes, int offset, int maxOffset) {
+        boolean flag = true;
+
         Node curr = root;
         int i = offset;
         while (bytes[i] != (byte) '\n') {
+            if (i == maxOffset) {
+                return 0;
+            }
             /*文本串中的字符*/
-            char ch = (char) (int) bytes[i];
+            byte ch = bytes[i];
             /*文本串中的字符和AC自动机中的字符进行比较*/
             if (curr.table[ch] != null) {
                 /*若相等，自动机进入下一状态*/
                 curr = curr.table[ch];
                 if (curr.isWord()) {
-                    result.get(curr.str).add(i - curr.str.length() + 1);
+                    // result.get(curr.str).add(i - curr.str.length() + 1);
+                    int index = i - curr.str.length() + 1;
+                    // System.out.println("Find: " + curr.str + " " + index);
+                    if (curr.str.charAt(1) == 'h') {
+                        if (bytes[i + 1] == (byte) '2'
+                                && bytes[i + 2] == (byte) '0'
+                                && bytes[i + 3] == (byte) '0'
+                                && (bytes[i + 4] == (byte) '&' || bytes[i + 4] == (byte) '\n')) {
+                            // 完全匹配
+                        } else {
+                            flag = false;
+                        }
+                    }
+                    if (curr.str.charAt(1) == 'e') {
+                        flag = false;
+                    }
                 }
                 /*这里很容易被忽视，因为一个目标串的中间某部分字符串可能正好包含另一个目标字符串，
                  * 即使当前结点不表示一个目标字符串的终点，但到当前结点为止可能恰好包含了一个字符串*/
                 if (curr.fail != null && curr.fail.isWord()) {
-                    result.get(curr.fail.str).add(i - curr.fail.str.length() + 1);
+                    // result.get(curr.fail.str).add(i - curr.fail.str.length() + 1);
+                    // System.out.println("Find: " + curr.str + " " + (i - curr.fail.str.length() + 1));
+
+                    int index = i - i - curr.fail.str.length() + 1;
+                    // System.out.println("Find: " + curr.str + " " + index);
+                    if (curr.str.charAt(1) == 'h') {
+                        if (bytes[i + 1] == (byte) '2'
+                                && bytes[i + 2] == (byte) '0'
+                                && bytes[i + 3] == (byte) '0'
+                                && (bytes[i + 4] == (byte) '&' || bytes[i + 4] == (byte) '\n')) {
+                            // 完全匹配
+                        } else {
+                            flag = false;
+                        }
+                    }
+                    if (curr.str.charAt(1) == 'e') {
+                        flag = false;
+                    }
                 }
                 /*索引自增，指向下一个文本串中的字符*/
                 i++;
@@ -172,6 +211,7 @@ public class AhoCorasickAutomation {
                 }
             }
         }
-        return result;
+        i++;
+        return flag ? i : -i;
     }
 }

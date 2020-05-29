@@ -3,6 +3,7 @@ package com.alirace.client;
 import com.alirace.model.*;
 import com.alirace.netty.MyDecoder;
 import com.alirace.netty.MyEncoder;
+import com.alirace.util.AhoCorasickAutomation;
 import com.alirace.util.SerializeUtil;
 import com.alirace.util.StringUtil;
 import io.netty.bootstrap.Bootstrap;
@@ -49,12 +50,12 @@ public class ClientService implements Runnable {
     // 真实数据
     private static final byte LOG_SEPARATOR = (byte) '|';
     private static final byte LINE_SEPARATOR = (byte) '\n'; // key:value 分隔符
-    private static final int LENGTH_PER_READ = 0x1 << 13; // 每一次读 8kb
+    private static final int LENGTH_PER_READ = 8192; // 每一次读 8kb
     private static int preOffset = LENGTH_PER_READ; // 上一次处理的偏移
     private static int nowOffset = LENGTH_PER_READ; // 当前偏移
     private static int logOffset = LENGTH_PER_READ; // 当前偏移
-    private static final int BYTES_LENGTH = 0x01 << 30;
-    private static byte[] bytes = new byte[BYTES_LENGTH + (0x01 << 13)];
+    private static final int BYTES_LENGTH = 819200000;
+    private static byte[] bytes = new byte[BYTES_LENGTH + 2 * LENGTH_PER_READ];
 
     // 索引部分
     private static final int BUCKETS_NUM = 0x01 << 20; // 100万
@@ -71,90 +72,129 @@ public class ClientService implements Runnable {
         HttpURLConnection httpConnection = (HttpURLConnection) url.openConnection(Proxy.NO_PROXY);
         InputStream input = httpConnection.getInputStream();
 
-        int readCharNum = 0;
+        int readByteCount = 0;
         int bucketIndex = 0;
         int logSeparatorTime = 0; // 日志分割符次数
 
         // 保存 traceId
         int pos = 0;
-        byte[] traceId = new byte[16];
+        byte[] traceId = new byte[32];
 
         while (true) {
+            // 尝试读入一次
+            readByteCount = input.read(bytes, logOffset, LENGTH_PER_READ);
 
-            readCharNum = input.read(bytes, logOffset, LENGTH_PER_READ);
-
-            // 文件结束不处理
-            if (readCharNum == -1) {
+            // 文件结束退出
+            if (readByteCount == -1) {
                 break;
             }
 
             // 日志坐标右移
-            logOffset += readCharNum;
+            logOffset += readByteCount;
 
-            while (nowOffset < logOffset) {
+            while (preOffset + 14 + 8 < logOffset) {
 
-                // 剩余长度过短不处理, 最小长度
-                if (logOffset - nowOffset < 16) {
+                // 从最左边开始处理
+                nowOffset = preOffset;
+
+                // 调试用延迟
+//                try {
+//                    TimeUnit.MILLISECONDS.sleep(100);
+//                } catch (InterruptedException e) {
+//                    e.printStackTrace();
+//                }
+
+                pos = 0;
+                while (bytes[nowOffset] != LOG_SEPARATOR && nowOffset < logOffset) {
+                    traceId[pos] = bytes[nowOffset];
+                    pos++;
+                    nowOffset++;
+                }
+                if (nowOffset == logOffset) {
                     break;
                 }
+                traceId[pos] = (byte) '\n';
+
+                // System.out.println(StringUtil.byteToString(traceId) + " ");
 
                 // 计算桶的索引
                 bucketIndex = StringUtil.byteToHex(bytes, preOffset, preOffset + 5);
                 // System.out.print(String.format("Bucket: %d ", bucketIndex));
 
-                for (pos = 0; pos < 16; pos++, nowOffset++) {
-                    if (bytes[nowOffset] == LOG_SEPARATOR) {
-                        break;
-                    }
-                    traceId[pos] = bytes[nowOffset];
-                }
-                // System.out.print(StringUtil.byteToString(traceId) + " ");
-
-                // 划过中间部分
-                logSeparatorTime = 0;
-                for (; nowOffset <= logOffset; nowOffset++) {
-                    if (bytes[nowOffset] == LOG_SEPARATOR) {
-                        logSeparatorTime++;
-                        if (logSeparatorTime == 8) {
-                            break;
-                        }
-                    }
-                }
-                if (logSeparatorTime != 8) {
-                    continue;
+                while (bytes[nowOffset] != LINE_SEPARATOR && nowOffset < logOffset) {
+                    nowOffset++;
                 }
 
+                if (nowOffset == logOffset) {
+                    break;
+                }
                 nowOffset++;
 
-                StringBuffer sb = new StringBuffer();
-                for (; nowOffset <= logOffset; nowOffset++) {
-                    if (LINE_SEPARATOR == bytes[nowOffset]) {
-                        break;
-                    }
-                    // System.out.print((char) (int) bytes[nowOffset]);
-                    // if (nowOffset + 7 > logOffset) {
-                    //    break;
-                    // }
-                    // FIXME: 先写一个暴力吧
-                    sb.append((char) bytes[nowOffset]);
-                }
-                // System.out.println(sb.toString());
-                boolean flag = Tag.isError(sb.toString());
-                if (flag) {
-                    // System.out.println(String.format("Bucket: %d ", bucketIndex) + "ERROR");
-                }
-                preOffset = ++nowOffset;
-                // System.out.println();
+                preOffset = nowOffset;
+
+//                // 滑过中间部分
+//                logSeparatorTime = 0;
+//                for (; nowOffset <= logOffset && logSeparatorTime < 8; nowOffset++) {
+//                    if (bytes[nowOffset] == LOG_SEPARATOR) {
+//                        logSeparatorTime++;
+//                    }
+//                }
+//                if (logSeparatorTime < 8) {
+//                    // nowOffset = preOffset; // 回溯
+//                    continue;
+//                }
+//
+//                int checkResult = AhoCorasickAutomation.find(bytes, nowOffset, logOffset);
+//                // 粘包的时候回溯检查数据
+//                if (checkResult == 0) {
+//                    // System.out.println(String.format("Bucket: %d 粘包", bucketIndex));
+//                    continue;
+//                }
+//                if (checkResult > 0) {
+//                    // System.out.println(String.format("Bucket: %d YES", bucketIndex));
+//                } else {
+//                    for (int i = 0; i < pos; i++) {
+//                        System.out.print((char) (int) traceId[i]);
+//                    }
+//                    System.out.println(String.format(" Bucket: %d No", bucketIndex));
+//                }
+//
+//                nowOffset++;
+//                StringBuffer sb = new StringBuffer();
+//                for (; nowOffset < logOffset; nowOffset++) {
+//                    if (LINE_SEPARATOR == bytes[nowOffset]) {
+//                        break;
+//                    }
+//                    // System.out.print((char) (int) bytes[nowOffset]);
+//                    // if (nowOffset + 7 > logOffset) {
+//                    //    break;
+//                    // }
+//                    // FIXME: 和暴力的结果对比
+//                    sb.append((char) bytes[nowOffset]);
+//                }
+//                // System.out.println(sb.toString());
+//                boolean flag = Tag.isError(sb.toString());
+//                if (flag) {
+//                    for (int i = 0; i < pos; i++) {
+//                        System.out.print((char) (int) traceId[i]);
+//                    }
+//                    // System.out.print(" " + sb.toString());
+//                    System.out.println(String.format(" Bucket: %d has ERROR", bucketIndex));
+//                }
+//
+//                preOffset = ++nowOffset;
+//                // System.out.println();
             }
 
             // 如果太长了要从头开始写
-            if (logOffset >= BYTES_LENGTH) {
+            if (logOffset > BYTES_LENGTH) {
                 // 拷贝末尾的数据
                 for (int i = 0; i < LENGTH_PER_READ; i++) {
                     bytes[i] = bytes[i + BYTES_LENGTH];
                 }
-                preOffset -= BYTES_LENGTH;
-                logOffset -= BYTES_LENGTH;
+                preOffset = preOffset % BYTES_LENGTH;
+                logOffset = logOffset % BYTES_LENGTH;
+                log.info("rewrite");
             }
         }
         log.info("Client pull data finish..." + logOffset);

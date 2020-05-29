@@ -38,7 +38,7 @@ public class CommonController {
         String port = Application.getSystemPort();
         if (CLIENT_PROCESS_PORT1.equals(port)) {
             // return "http://localhost:" + CommonController.getDataSourcePort() + "/trace1.data";
-//            return "http://localhost:" + "8004" + "/trace1.data";
+            // return "http://localhost:" + "8004" + "/trace1.data";
             return "http://10.66.1.107:" + "8004" + "/trace1.data";
         }
         if (CLIENT_PROCESS_PORT2.equals(port)) {
