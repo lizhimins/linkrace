@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
+import java.net.URISyntaxException;
 
 public class HttpClient {
 
@@ -21,7 +22,10 @@ public class HttpClient {
 
     private static URI uri;
 
-    public static void init() {
+    public static void init() throws URISyntaxException {
+
+        uri = new URI("http://10.66.1.107:8004/trace1.data");
+
         log.info("HttpClient initializing start...");
         EventLoopGroup workerGroup = new NioEventLoopGroup();
         try {
@@ -36,6 +40,7 @@ public class HttpClient {
                             ch.pipeline().addLast(new HttpResponseDecoder());
                             // 客户端发送的是 httprequest, 所以要使用 HttpRequestEncoder 进行编码
                             ch.pipeline().addLast(new HttpRequestEncoder());
+                            // ch.pipeline().addLast(new HttpObjectAggregator(65535));
                             ch.pipeline().addLast(new HttpClientHandler());
                         }
                     });
@@ -50,6 +55,7 @@ public class HttpClient {
     }
 
     public static void query(String requestOffset) {
+        log.info("requestOffset: " + requestOffset);
         DefaultFullHttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, uri.toASCIIString());
         // 构建http请求
         request.headers().set(HttpHeaderNames.HOST, "localhost");
@@ -63,6 +69,6 @@ public class HttpClient {
         HttpClient.init();
         HttpClient.connect("10.66.1.107", 8004);
         uri = new URI("http://10.66.1.107:8004/trace1.data");
-        query("bytes=200-2000, 0-111");
+        query("bytes=500-13000");
     }
 }

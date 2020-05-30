@@ -1,5 +1,7 @@
 package com.alirace.model;
 
+import com.alirace.client.HttpClient;
+
 public class Bucket {
 
     private byte[] traceId = new byte[18];
@@ -9,8 +11,8 @@ public class Bucket {
 
     private int index = 0;
 
-    private int[] start = new int[32];
-    private int[] end = new int[32];
+    private long[] start = new long[64];
+    private long[] end = new long[64];
 
     public Bucket() {
     }
@@ -19,8 +21,17 @@ public class Bucket {
         return traceId;
     }
 
+    public void init() {
+        index = 0;
+        isError = false;
+    }
+
+    // 硬拷贝 traceId, 逻辑删除偏移量
     public void setTraceId(byte[] traceId) {
-        this.traceId = traceId;
+        for (int i = 0; i < 17; i++) {
+            this.traceId[i] = traceId[i];
+        }
+        init();
     }
 
     public boolean isError() {
@@ -32,7 +43,7 @@ public class Bucket {
     }
 
     // 检查对应的桶中的 traceId 和当前 traceId 是否一致
-    private boolean isSameTraceId(byte[] traceId) {
+    public boolean isSameTraceId(byte[] traceId) {
         for (int i = 0; i < 16 && traceId[i] != (byte) (int) '\n'; i++) {
             if (traceId[i] != this.traceId[i]) {
                 return false;
@@ -41,19 +52,29 @@ public class Bucket {
         return true;
     }
 
-    public void addNewSpan(byte[] traceId, int startOff, int endOff, boolean isError) {
-        if (!isSameTraceId(traceId)) {
-            index = 0;
-            this.isError = false;
-        }
+    public void addNewSpan(long startOff, long endOff, boolean isError) {
         this.isError |= isError;
         this.start[index] = startOff;
         this.end[index] = endOff;
+        index++;
     }
 
-    public void checkAndUpload(int preBucketOffset) {
-        if () {
+    public String getQueryString() {
+        StringBuffer sb = new StringBuffer();
+        for (int i = 0; i < index; i++) {
+            sb.append(start[i]);
+            sb.append("-");
+            sb.append(end[i]);
+            sb.append(",");
+        }
+        return sb.substring(0, sb.lastIndexOf(","));
+    }
 
+    public void checkAndUpload(long preBucketOffset) {
+        if (isError && start[index] != preBucketOffset) {
+            // System.out.println(getQueryString());
+            HttpClient.query(getQueryString());
+            init();
         }
     }
 }

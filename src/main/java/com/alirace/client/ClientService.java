@@ -20,6 +20,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.Proxy;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -47,7 +48,7 @@ public class ClientService implements Runnable {
     private static String path;
 
     // 精确一次上传
-    private static ConcurrentHashMap<String /*traceId*/, AtomicBoolean /*isUpload*/> waitArea;
+    private static HashMap<String /*traceId*/, AtomicBoolean /*isUpload*/> waitArea = new HashMap<>();
 
     // 真实数据
     private static final byte LOG_SEPARATOR = (byte) '|';
@@ -57,6 +58,7 @@ public class ClientService implements Runnable {
     private static int preOffset = 0; // 起始偏移
     private static int nowOffset = 0; // 当前偏移
     private static int logOffset = 0; // 日志偏移
+    private static long roundOffset = 0; // 真实偏移
 
     private static final int BYTES_LENGTH = 8192 * 1024 * 32;
     private static byte[] bytes = new byte[BYTES_LENGTH + 2 * LENGTH_PER_READ];
@@ -88,6 +90,7 @@ public class ClientService implements Runnable {
         nowOffset = LENGTH_PER_READ;
         preOffset = LENGTH_PER_READ;
         logOffset = LENGTH_PER_READ;
+        roundOffset = 0L;
 
         int readByteCount = input.read(bytes, logOffset, LENGTH_PER_READ);
         logOffset += readByteCount;
@@ -109,7 +112,7 @@ public class ClientService implements Runnable {
 
                 // 调试用延迟
 //                try {
-//                    TimeUnit.MILLISECONDS.sleep(100);
+//                    TimeUnit.MILLISECONDS.sleep(1);
 //                } catch (InterruptedException e) {
 //                    e.printStackTrace();
 //                }
@@ -129,6 +132,13 @@ public class ClientService implements Runnable {
                 bucketIndex = StringUtil.byteToHex(traceId, 0, 5);
                 // System.out.println(String.format("index: %d ", bucketIndex));
 
+                // 将 traceId
+                boolean isSame = buckets[bucketIndex].isSameTraceId(traceId);
+
+                if (!isSame) {
+                    buckets[bucketIndex].setTraceId(traceId);
+                }
+
                 // 滑过中间部分
                 for (int sep = 0; sep < 8; nowOffset++) {
                     if (bytes[nowOffset] == LOG_SEPARATOR) {
@@ -143,21 +153,33 @@ public class ClientService implements Runnable {
                     // System.out.println("No");
                     nowOffset = -nowOffset;
                     errorCount.incrementAndGet();
-                    buckets[bucketIndex].addNewSpan(traceId, preOffset, nowOffset + 1, true);
+
+                    long start = roundOffset + preOffset - LENGTH_PER_READ;
+                    long end = roundOffset + nowOffset - LENGTH_PER_READ + 1;
+
+                    buckets[bucketIndex].addNewSpan(start, end, true);
                 } else {
                     // System.out.println("Yes");
-                    buckets[bucketIndex].addNewSpan(traceId, preOffset, nowOffset + 1, false);
+
+                    long start = roundOffset + preOffset - LENGTH_PER_READ;
+                    long end = roundOffset + nowOffset - LENGTH_PER_READ + 1;
+
+                    buckets[bucketIndex].addNewSpan(start, end, false);
                 }
 
-                // 窗口操作
+                // 窗口操作, 当前写 nodeIndex
+                // 先取出数据
                 int preBucketIndex = nodes[nodeIndex].bucketIndex;
-                int preBucketOffset = nodes[nodeIndex].startOffset;
+                long preStartOffset = nodes[nodeIndex].startOffset;
+
                 // 如果已经有数据了
                 if (preBucketIndex != -1) {
-                    buckets[preBucketIndex].checkAndUpload(preBucketOffset);
+                    buckets[preBucketIndex].checkAndUpload(preStartOffset);
                 }
                 nodes[nodeIndex].bucketIndex = bucketIndex;
                 nodes[nodeIndex].startOffset = preOffset;
+                nodeIndex = (nodeIndex + 1) % WINDOW_SIZE;
+
                 nowOffset++;
             }
 
@@ -169,6 +191,7 @@ public class ClientService implements Runnable {
                 }
                 nowOffset -= BYTES_LENGTH;
                 logOffset -= BYTES_LENGTH;
+                roundOffset += BYTES_LENGTH;
                 log.info("rewrite");
             }
         }
@@ -265,7 +288,7 @@ public class ClientService implements Runnable {
     }
 
     // 表示初始化
-    public static void init() {
+    public static void init() throws URISyntaxException {
         log.info("Client initializing start...");
 
         // 监控服务
