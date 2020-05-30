@@ -7,10 +7,14 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 
 public class HttpClient {
+
+    private static final Logger log = LoggerFactory.getLogger(HttpClient.class);
 
     private static Bootstrap bootstrap;
     private static ChannelFuture future;
@@ -18,6 +22,7 @@ public class HttpClient {
     private static URI uri;
 
     public static void init() {
+        log.info("HttpClient initializing start...");
         EventLoopGroup workerGroup = new NioEventLoopGroup();
         try {
             bootstrap = new Bootstrap();
@@ -40,15 +45,16 @@ public class HttpClient {
     }
 
     public static void connect(String host, int port) throws Exception {
+        log.info("HttpClient connect to Nginx...");
         future = bootstrap.connect(host, port).sync();
     }
 
-    public static void query(int start, int end) {
+    public static void query(String requestOffset) {
         DefaultFullHttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, uri.toASCIIString());
         // 构建http请求
         request.headers().set(HttpHeaderNames.HOST, "localhost");
         request.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderNames.CONNECTION);
-        request.headers().set(HttpHeaderNames.RANGE, "bytes=200-2000");
+        request.headers().set(HttpHeaderNames.RANGE, requestOffset);
         // 发送http请求
         future.channel().writeAndFlush(request);
     }
@@ -57,6 +63,6 @@ public class HttpClient {
         HttpClient.init();
         HttpClient.connect("10.66.1.107", 8004);
         uri = new URI("http://10.66.1.107:8004/trace1.data");
-        query(200, 2000);
+        query("bytes=200-2000, 0-111");
     }
 }

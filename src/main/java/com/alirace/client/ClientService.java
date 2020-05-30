@@ -1,5 +1,6 @@
 package com.alirace.client;
 
+import com.alirace.controller.CommonController;
 import com.alirace.model.*;
 import com.alirace.netty.MyDecoder;
 import com.alirace.netty.MyEncoder;
@@ -57,13 +58,16 @@ public class ClientService implements Runnable {
     private static int nowOffset = 0; // 当前偏移
     private static int logOffset = 0; // 日志偏移
 
-    private static final int BYTES_LENGTH = 8192 * 1024 * 64;
+    private static final int BYTES_LENGTH = 8192 * 1024 * 32;
     private static byte[] bytes = new byte[BYTES_LENGTH + 2 * LENGTH_PER_READ];
 
     // 索引部分
     private static final int BUCKETS_NUM = 0x01 << 20; // 100万
     private static Bucket[] buckets = new Bucket[BUCKETS_NUM];
-    private static final int WINDOW_SIZE = 20000; // 窗口大小配置为 2万
+
+    // 窗口大小配置为 2万
+    private static int nodeIndex;
+    private static final int WINDOW_SIZE = 20000;
     private static Node[] nodes = new Node[WINDOW_SIZE];
 
     // 保存 traceId
@@ -144,6 +148,16 @@ public class ClientService implements Runnable {
                     // System.out.println("Yes");
                     buckets[bucketIndex].addNewSpan(traceId, preOffset, nowOffset + 1, false);
                 }
+
+                // 窗口操作
+                int preBucketIndex = nodes[nodeIndex].bucketIndex;
+                int preBucketOffset = nodes[nodeIndex].startOffset;
+                // 如果已经有数据了
+                if (preBucketIndex != -1) {
+                    buckets[preBucketIndex].checkAndUpload(preBucketOffset);
+                }
+                nodes[nodeIndex].bucketIndex = bucketIndex;
+                nodes[nodeIndex].startOffset = preOffset;
                 nowOffset++;
             }
 
@@ -253,10 +267,23 @@ public class ClientService implements Runnable {
     // 表示初始化
     public static void init() {
         log.info("Client initializing start...");
+
         // 监控服务
         // ClientMonitor.start();
+
+        log.info("Bucket initializing start...");
+        for (int i = 0; i < BUCKETS_NUM; i++) {
+            buckets[i] = new Bucket();
+        }
+
+        log.info("Windows initializing start...");
+        for (int i = 0; i < WINDOW_SIZE; i++) {
+            nodes[i] = new Node();
+        }
         // 初始化数据服务线程
         clientService = new Thread(new ClientService(), "Client");
+        HttpClient.init();
+
         // 在最后启动 netty 进行通信
         startNetty();
     }
@@ -264,8 +291,11 @@ public class ClientService implements Runnable {
     @Override
     public void run() {
         try {
+            HttpClient.connect("10.66.1.107", CommonController.getDataSourcePort());
             pullData();
         } catch (IOException e) {
+            e.printStackTrace();
+        } catch (Exception e) {
             e.printStackTrace();
         }
     }

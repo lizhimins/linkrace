@@ -50,4 +50,10 @@ public class Bucket {
         this.start[index] = startOff;
         this.end[index] = endOff;
     }
+
+    public void checkAndUpload(int preBucketOffset) {
+        if () {
+
+        }
+    }
 }
