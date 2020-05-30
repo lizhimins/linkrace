@@ -22,6 +22,7 @@ import java.net.Proxy;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -51,10 +52,12 @@ public class ClientService implements Runnable {
     private static final byte LOG_SEPARATOR = (byte) '|';
     private static final byte LINE_SEPARATOR = (byte) '\n'; // key:value 分隔符
     private static final int LENGTH_PER_READ = 8192; // 每一次读 8kb
-    private static int preOffset = LENGTH_PER_READ; // 上一次处理的偏移
-    private static int nowOffset = LENGTH_PER_READ; // 当前偏移
-    private static int logOffset = LENGTH_PER_READ; // 当前偏移
-    private static final int BYTES_LENGTH = 819200000;
+
+    private static int preOffset = 0; // 起始偏移
+    private static int nowOffset = 0; // 当前偏移
+    private static int logOffset = 0; // 日志偏移
+
+    private static final int BYTES_LENGTH = 8192 * 1024 * 64;
     private static byte[] bytes = new byte[BYTES_LENGTH + 2 * LENGTH_PER_READ];
 
     // 索引部分
@@ -62,6 +65,11 @@ public class ClientService implements Runnable {
     private static Bucket[] buckets = new Bucket[BUCKETS_NUM];
     private static final int WINDOW_SIZE = 20000; // 窗口大小配置为 2万
     private static Node[] nodes = new Node[WINDOW_SIZE];
+
+    // 保存 traceId
+    private static int pos = 0;
+    private static byte[] traceId = new byte[32];
+    private static int bucketIndex = 0;
 
     // 执行线程
     private static Thread clientService;
@@ -72,13 +80,13 @@ public class ClientService implements Runnable {
         HttpURLConnection httpConnection = (HttpURLConnection) url.openConnection(Proxy.NO_PROXY);
         InputStream input = httpConnection.getInputStream();
 
-        int readByteCount = 0;
-        int bucketIndex = 0;
-        int logSeparatorTime = 0; // 日志分割符次数
+        // 初始化左右指针, 空出第一小段数据以备复制
+        nowOffset = LENGTH_PER_READ;
+        preOffset = LENGTH_PER_READ;
+        logOffset = LENGTH_PER_READ;
 
-        // 保存 traceId
-        int pos = 0;
-        byte[] traceId = new byte[32];
+        int readByteCount = input.read(bytes, logOffset, LENGTH_PER_READ);
+        logOffset += readByteCount;
 
         while (true) {
             // 尝试读入一次
@@ -92,10 +100,8 @@ public class ClientService implements Runnable {
             // 日志坐标右移
             logOffset += readByteCount;
 
-            while (preOffset + 14 + 8 < logOffset) {
-
-                // 从最左边开始处理
-                nowOffset = preOffset;
+            while (nowOffset + LENGTH_PER_READ < logOffset) {
+                preOffset = nowOffset;
 
                 // 调试用延迟
 //                try {
@@ -104,100 +110,57 @@ public class ClientService implements Runnable {
 //                    e.printStackTrace();
 //                }
 
+                // traceId 部分处理
                 pos = 0;
-                while (bytes[nowOffset] != LOG_SEPARATOR && nowOffset < logOffset) {
+                while (bytes[nowOffset] != LOG_SEPARATOR) {
                     traceId[pos] = bytes[nowOffset];
                     pos++;
                     nowOffset++;
                 }
-                if (nowOffset == logOffset) {
-                    break;
-                }
                 traceId[pos] = (byte) '\n';
 
-                // System.out.println(StringUtil.byteToString(traceId) + " ");
+                // System.out.print(StringUtil.byteToString(traceId) + " ");
 
                 // 计算桶的索引
-                bucketIndex = StringUtil.byteToHex(bytes, preOffset, preOffset + 5);
-                // System.out.print(String.format("Bucket: %d ", bucketIndex));
+                bucketIndex = StringUtil.byteToHex(traceId, 0, 5);
+                // System.out.println(String.format("index: %d ", bucketIndex));
 
-                while (bytes[nowOffset] != LINE_SEPARATOR && nowOffset < logOffset) {
-                    nowOffset++;
+                // 滑过中间部分
+                for (int sep = 0; sep < 8; nowOffset++) {
+                    if (bytes[nowOffset] == LOG_SEPARATOR) {
+                        sep++;
+                    }
                 }
 
-                if (nowOffset == logOffset) {
-                    break;
+                nowOffset = AhoCorasickAutomation.find(bytes, nowOffset - 1);
+
+                // 返回值 < 0, 说明当前 traceId 有问题
+                if (nowOffset < 0) {
+                    // System.out.println("No");
+                    nowOffset = -nowOffset;
+                    errorCount.incrementAndGet();
+                    buckets[bucketIndex].addNewSpan(traceId, preOffset, nowOffset + 1, true);
+                } else {
+                    // System.out.println("Yes");
+                    buckets[bucketIndex].addNewSpan(traceId, preOffset, nowOffset + 1, false);
                 }
                 nowOffset++;
-
-                preOffset = nowOffset;
-
-//                // 滑过中间部分
-//                logSeparatorTime = 0;
-//                for (; nowOffset <= logOffset && logSeparatorTime < 8; nowOffset++) {
-//                    if (bytes[nowOffset] == LOG_SEPARATOR) {
-//                        logSeparatorTime++;
-//                    }
-//                }
-//                if (logSeparatorTime < 8) {
-//                    // nowOffset = preOffset; // 回溯
-//                    continue;
-//                }
-//
-//                int checkResult = AhoCorasickAutomation.find(bytes, nowOffset, logOffset);
-//                // 粘包的时候回溯检查数据
-//                if (checkResult == 0) {
-//                    // System.out.println(String.format("Bucket: %d 粘包", bucketIndex));
-//                    continue;
-//                }
-//                if (checkResult > 0) {
-//                    // System.out.println(String.format("Bucket: %d YES", bucketIndex));
-//                } else {
-//                    for (int i = 0; i < pos; i++) {
-//                        System.out.print((char) (int) traceId[i]);
-//                    }
-//                    System.out.println(String.format(" Bucket: %d No", bucketIndex));
-//                }
-//
-//                nowOffset++;
-//                StringBuffer sb = new StringBuffer();
-//                for (; nowOffset < logOffset; nowOffset++) {
-//                    if (LINE_SEPARATOR == bytes[nowOffset]) {
-//                        break;
-//                    }
-//                    // System.out.print((char) (int) bytes[nowOffset]);
-//                    // if (nowOffset + 7 > logOffset) {
-//                    //    break;
-//                    // }
-//                    // FIXME: 和暴力的结果对比
-//                    sb.append((char) bytes[nowOffset]);
-//                }
-//                // System.out.println(sb.toString());
-//                boolean flag = Tag.isError(sb.toString());
-//                if (flag) {
-//                    for (int i = 0; i < pos; i++) {
-//                        System.out.print((char) (int) traceId[i]);
-//                    }
-//                    // System.out.print(" " + sb.toString());
-//                    System.out.println(String.format(" Bucket: %d has ERROR", bucketIndex));
-//                }
-//
-//                preOffset = ++nowOffset;
-//                // System.out.println();
             }
 
             // 如果太长了要从头开始写
-            if (logOffset > BYTES_LENGTH) {
+            if (logOffset > BYTES_LENGTH + LENGTH_PER_READ) {
                 // 拷贝末尾的数据
-                for (int i = 0; i < LENGTH_PER_READ; i++) {
-                    bytes[i] = bytes[i + BYTES_LENGTH];
+                for (int i = nowOffset; i < logOffset; i++) {
+                    bytes[i - BYTES_LENGTH] = bytes[i];
                 }
-                preOffset = preOffset % BYTES_LENGTH;
-                logOffset = logOffset % BYTES_LENGTH;
+                nowOffset -= BYTES_LENGTH;
+                logOffset -= BYTES_LENGTH;
                 log.info("rewrite");
             }
         }
         log.info("Client pull data finish..." + logOffset);
+        log.info("errorCount: " + errorCount);
+        // log.info("traceCount: " + traceCount.size());
     }
 
     // 查询
@@ -314,12 +277,65 @@ public class ClientService implements Runnable {
     public static Thread getClientService() {
         return clientService;
     }
-
-    public static int getPreOffset() {
-        return preOffset;
-    }
-
-    public static int getLogOffset() {
-        return logOffset;
-    }
 }
+
+
+//                int checkResult = AhoCorasickAutomation.find(bytes, nowOffset, logOffset);
+//                // 粘包的时候回溯检查数据
+//                if (checkResult == 0) {
+//                    // System.out.println(String.format("Bucket: %d 粘包", bucketIndex));
+//                    continue;
+//                }
+//                if (checkResult > 0) {
+//                    // System.out.println(String.format("Bucket: %d YES", bucketIndex));
+//                } else {
+//                    for (int i = 0; i < pos; i++) {
+//                        System.out.print((char) (int) traceId[i]);
+//                    }
+//                    System.out.println(String.format(" Bucket: %d No", bucketIndex));
+//                }
+//
+//                nowOffset++;
+//                StringBuffer sb = new StringBuffer();
+//                for (; nowOffset < logOffset; nowOffset++) {
+//                    if (LINE_SEPARATOR == bytes[nowOffset]) {
+//                        break;
+//                    }
+//                    // System.out.print((char) (int) bytes[nowOffset]);
+//                    // if (nowOffset + 7 > logOffset) {
+//                    //    break;
+//                    // }
+//                    // FIXME: 和暴力的结果对比
+//                    sb.append((char) bytes[nowOffset]);
+//                }
+//                // System.out.println(sb.toString());
+//                boolean flag = Tag.isError(sb.toString());
+//                if (flag) {
+//                    for (int i = 0; i < pos; i++) {
+//                        System.out.print((char) (int) traceId[i]);
+//                    }
+//                    // System.out.print(" " + sb.toString());
+//                    System.out.println(String.format(" Bucket: %d has ERROR", bucketIndex));
+//                }
+//
+//                preOffset = ++nowOffset;
+//                // System.out.println();
+
+
+/*
+
+对拍检查
+int offset = nowOffset;
+int endOff = nowOffset;
+StringBuffer sb = new StringBuffer();
+while (bytes[endOff] != LINE_SEPARATOR) {
+    char ch = (char) (int) bytes[endOff];
+    sb.append(ch);
+    endOff++;
+}
+
+boolean flag = Tag.isError(sb.toString());
+if (nowOffset < 0 && !flag || nowOffset > 0 && flag) {
+    System.out.println(sb.toString());
+}
+ */

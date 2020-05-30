@@ -30,10 +30,8 @@ public class AhoCorasickAutomation {
     static {
         target.add("|http.status_code=");
         target.add("&http.status_code=");
-        target.add("|error=1&");
-        target.add("&error=1&");
-        target.add("|error=1\n");
-        target.add("&error=1\n");
+        target.add("|error=1");
+        target.add("&error=1");
         buildTrieTree();
         build_AC_FromTrie();
     }
@@ -138,20 +136,16 @@ public class AhoCorasickAutomation {
 
     /**
      * 正数 正确
-     * 0 粘包
      * 负数 错误
      * 绝对值为 \n 的 offset
      */
     /*在文本串中查找所有的目标字符串*/
-    public static int find(byte[] bytes, int offset, int maxOffset) {
+    public static int find(byte[] bytes, int offset) {
         boolean flag = true;
 
         Node curr = root;
         int i = offset;
         while (bytes[i] != (byte) '\n') {
-            if (i == maxOffset) {
-                return 0;
-            }
             /*文本串中的字符*/
             byte ch = bytes[i];
             /*文本串中的字符和AC自动机中的字符进行比较*/
@@ -163,10 +157,10 @@ public class AhoCorasickAutomation {
                     int index = i - curr.str.length() + 1;
                     // System.out.println("Find: " + curr.str + " " + index);
                     if (curr.str.charAt(1) == 'h') {
-                        if (bytes[i + 1] == (byte) '2'
-                                && bytes[i + 2] == (byte) '0'
-                                && bytes[i + 3] == (byte) '0'
-                                && (bytes[i + 4] == (byte) '&' || bytes[i + 4] == (byte) '\n')) {
+                        if (bytes[i + 1] == (byte) (int) '2'
+                                && bytes[i + 2] == (byte) (int) '0'
+                                && bytes[i + 3] == (byte) (int) '0'
+                                && (bytes[i + 4] == (byte) (int) '&' || bytes[i + 4] == (byte) (int) '\n')) {
                             // 完全匹配
                         } else {
                             flag = false;
@@ -185,10 +179,10 @@ public class AhoCorasickAutomation {
                     int index = i - i - curr.fail.str.length() + 1;
                     // System.out.println("Find: " + curr.str + " " + index);
                     if (curr.str.charAt(1) == 'h') {
-                        if (bytes[i + 1] == (byte) '2'
-                                && bytes[i + 2] == (byte) '0'
-                                && bytes[i + 3] == (byte) '0'
-                                && (bytes[i + 4] == (byte) '&' || bytes[i + 4] == (byte) '\n')) {
+                        if (bytes[i + 1] == (byte) (int) '2'
+                                && bytes[i + 2] == (byte) (int) '0'
+                                && bytes[i + 3] == (byte) (int) '0'
+                                && (bytes[i + 4] == (byte) (int) '&' || bytes[i + 4] == (byte) (int) '\n')) {
                             // 完全匹配
                         } else {
                             flag = false;

@@ -77,7 +77,7 @@ public class AhoCorasickAutomationTest {
             String[] split = list.get(i).split("\\|");
             System.out.println(Tag.isError(split[8]) ? "Yes" : "No");
 
-            System.out.println(aca.find(list.get(i).getBytes(), 0, list.get(i).getBytes().length));
+            System.out.println(aca.find(list.get(i).getBytes(), 0));
             System.out.println();
         }
     }
@@ -95,7 +95,7 @@ public class AhoCorasickAutomationTest {
             System.out.println(split[8]);
             System.out.println(Tag.isError(split[8]) ? "Yes" : "No");
 
-            System.out.println(aca.find(list.get(i).getBytes(), 0, list.get(i).getBytes().length));
+            System.out.println(aca.find(list.get(i).getBytes(), 0));
             System.out.println();
         }
     }
