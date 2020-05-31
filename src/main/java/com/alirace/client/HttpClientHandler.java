@@ -1,19 +1,19 @@
 package com.alirace.client;
 
-import com.alirace.netty.ByteBufToBytes;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.Unpooled;
-import io.netty.buffer.UnpooledUnsafeDirectByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
-import io.netty.handler.codec.http.*;
+import io.netty.handler.codec.http.HttpContent;
+import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http.HttpResponse;
+import io.netty.handler.codec.http.HttpUtil;
 
-import java.nio.charset.StandardCharsets;
+import static com.alirace.client.HttpClient.BYTES_LENGTH;
 
 public class HttpClientHandler extends ChannelInboundHandlerAdapter {
 
-    private ByteBuf byteBuf = Unpooled.buffer(2000);
+    private ByteBuf byteBuf = Unpooled.buffer(BYTES_LENGTH);
 
     private long contentLength = 0;
 
@@ -24,7 +24,7 @@ public class HttpClientHandler extends ChannelInboundHandlerAdapter {
             System.out.println("CONTENT_TYPE:" + response.headers().get(HttpHeaderNames.CONTENT_TYPE));
             if (HttpUtil.isContentLengthSet(response)) {
                 contentLength = HttpUtil.getContentLength(response);
-                // System.out.println(contentLength);
+                System.out.println(contentLength);
             }
         }
 
@@ -33,13 +33,14 @@ public class HttpClientHandler extends ChannelInboundHandlerAdapter {
             ByteBuf content = httpContent.content();
             System.out.println(content.writerIndex());
 
-//            if (byteBuf.writerIndex() > 1000) {
-//                byteBuf.discardReadBytes();
-//                //System.out.println(byteBuf.toString(StandardCharsets.UTF_8));
-//                for (int i = 0; i < 30; i++) {
-//                    System.out.print((char) (int) byteBuf.getByte(i));
-//                }
-//            }
+            if (byteBuf.writerIndex() > 1000) {
+                // byteBuf.setIndex(0, 20);
+                // byteBuf.discardReadBytes();
+                //System.out.println(byteBuf.toString(StandardCharsets.UTF_8));
+                for (int i = 0; i < 30; i++) {
+                    System.out.print((char) (int) byteBuf.getByte(i));
+                }
+            }
 
             byteBuf.writeBytes(content);
             content.release();

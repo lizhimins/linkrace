@@ -2,11 +2,13 @@ package com.alirace.controller;
 
 import com.alirace.Application;
 import com.alirace.client.ClientService;
+import com.alirace.client.HttpClient;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
+import java.net.URISyntaxException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.alirace.Application.CLIENT_PROCESS_PORT1;
@@ -59,15 +61,13 @@ public class CommonController {
     }
 
     @RequestMapping("/setParameter")
-    public String setParamter(@RequestParam Integer port) throws IOException, InterruptedException {
+    public String setParamter(@RequestParam Integer port) throws IOException, InterruptedException, URISyntaxException {
         DATA_SOURCE_PORT = port;
         if (isBeginning.compareAndSet(false, true)) {
             // 开始读入数据
             if (Application.isClientProcess()) {
-                // 放入文件地址
-                ClientService.setPath(getPath());
-                // 开始处理数据
-                ClientService.getClientService().start();
+                // 传入地址即可
+                ClientService.startPullHttpData(getPath());
             }
         }
         return "suc";
