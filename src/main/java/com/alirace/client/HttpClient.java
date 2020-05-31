@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.List;
 
 public class HttpClient {
 
@@ -21,6 +22,10 @@ public class HttpClient {
     private static ChannelFuture future;
 
     private static URI uri;
+
+    // 执行线程
+    private static List<Thread> pullServices;
+
 
     public static void init() throws URISyntaxException {
 
@@ -40,7 +45,8 @@ public class HttpClient {
                             ch.pipeline().addLast(new HttpResponseDecoder());
                             // 客户端发送的是 httprequest, 所以要使用 HttpRequestEncoder 进行编码
                             ch.pipeline().addLast(new HttpRequestEncoder());
-                            // ch.pipeline().addLast(new HttpObjectAggregator(65535));
+                            // ch.pipeline().addLast(new HttpObjectAggregator(1048576));
+                            // ch.pipeline().addLast(new ChunkedWriteHandler());
                             ch.pipeline().addLast(new HttpClientHandler());
                         }
                     });
@@ -60,15 +66,23 @@ public class HttpClient {
         // 构建http请求
         request.headers().set(HttpHeaderNames.HOST, "localhost");
         request.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderNames.CONNECTION);
+        request.headers().set(HttpHeaderNames.CONTENT_LENGTH, request.content().readableBytes());
         request.headers().set(HttpHeaderNames.RANGE, requestOffset);
         // 发送http请求
-        future.channel().writeAndFlush(request);
+        future.channel().writeAndFlush(request).addListener(new ChannelFutureListener() {
+            @Override
+            public void operationComplete(ChannelFuture future) throws Exception {
+                System.out.println(future);
+            }
+        });
     }
 
     public static void main(String[] args) throws Exception {
         HttpClient.init();
         HttpClient.connect("10.66.1.107", 8004);
         uri = new URI("http://10.66.1.107:8004/trace1.data");
-        query("bytes=500-13000");
+        query("bytes=0-2000000");
+//        query("bytes=14517359-14517659");
+//        query("bytes=14517359-14517659");
     }
 }

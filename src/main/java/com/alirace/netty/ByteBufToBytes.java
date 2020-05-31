@@ -1,7 +1,9 @@
 package com.alirace.netty;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.Unpooled;
+import io.netty.buffer.UnpooledUnsafeDirectByteBuf;
 
 public class ByteBufToBytes {
     private ByteBuf temp;
@@ -9,6 +11,7 @@ public class ByteBufToBytes {
 
     public ByteBufToBytes(int length) {
         temp = Unpooled.buffer(length);
+        temp = new UnpooledUnsafeDirectByteBuf(ByteBufAllocator.DEFAULT, 8192 * 1024, 8192 * 1024);
     }
 
     public void reading(ByteBuf datas) {

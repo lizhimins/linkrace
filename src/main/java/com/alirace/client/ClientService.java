@@ -25,6 +25,7 @@ import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -39,7 +40,7 @@ public class ClientService implements Runnable {
     private static final String HOST = "localhost";
     private static final int PORT = 8003;
 
-    // Netty 相关配置
+    // 和汇总服务器 通信 Netty 相关配置
     private static EventLoopGroup workerGroup;
     private static Bootstrap bootstrap;
     private static ChannelFuture future;
@@ -60,7 +61,7 @@ public class ClientService implements Runnable {
     private static int logOffset = 0; // 日志偏移
     private static long roundOffset = 0; // 真实偏移
 
-    private static final int BYTES_LENGTH = 8192 * 1024 * 32;
+    private static final int BYTES_LENGTH = 8192 * 1024;
     private static byte[] bytes = new byte[BYTES_LENGTH + 2 * LENGTH_PER_READ];
 
     // 索引部分
@@ -77,13 +78,12 @@ public class ClientService implements Runnable {
     private static byte[] traceId = new byte[32];
     private static int bucketIndex = 0;
 
-    // 执行线程
-    private static Thread clientService;
 
     public void pullData() throws IOException {
         log.info("Client pull data start... Data path: " + path);
         URL url = new URL(path);
         HttpURLConnection httpConnection = (HttpURLConnection) url.openConnection(Proxy.NO_PROXY);
+        // httpConnection.setRequestProperty("range","bytes=14517359-14517659");
         InputStream input = httpConnection.getInputStream();
 
         // 初始化左右指针, 空出第一小段数据以备复制
@@ -153,17 +153,13 @@ public class ClientService implements Runnable {
                     // System.out.println("No");
                     nowOffset = -nowOffset;
                     errorCount.incrementAndGet();
-
                     long start = roundOffset + preOffset - LENGTH_PER_READ;
-                    long end = roundOffset + nowOffset - LENGTH_PER_READ + 1;
-
+                    long end = roundOffset + nowOffset - LENGTH_PER_READ;
                     buckets[bucketIndex].addNewSpan(start, end, true);
                 } else {
                     // System.out.println("Yes");
-
                     long start = roundOffset + preOffset - LENGTH_PER_READ;
-                    long end = roundOffset + nowOffset - LENGTH_PER_READ + 1;
-
+                    long end = roundOffset + nowOffset - LENGTH_PER_READ;
                     buckets[bucketIndex].addNewSpan(start, end, false);
                 }
 
@@ -192,10 +188,10 @@ public class ClientService implements Runnable {
                 nowOffset -= BYTES_LENGTH;
                 logOffset -= BYTES_LENGTH;
                 roundOffset += BYTES_LENGTH;
-                log.info("rewrite");
+                // log.info("rewrite");
             }
         }
-        log.info("Client pull data finish..." + logOffset);
+        log.info("Client pull data finish...");
         log.info("errorCount: " + errorCount);
         // log.info("traceCount: " + traceCount.size());
     }
@@ -212,9 +208,8 @@ public class ClientService implements Runnable {
     }
 
     // 上传调用链
-    public static void uploadRecord(Record record) {
+    public static void upload(byte[] body) {
         uploadCount.incrementAndGet();
-        byte[] body = SerializeUtil.serialize(record);
         Message message = new Message(MessageType.UPLOAD.getValue(), body);
         future.channel().writeAndFlush(message);
     }
@@ -303,6 +298,7 @@ public class ClientService implements Runnable {
         for (int i = 0; i < WINDOW_SIZE; i++) {
             nodes[i] = new Node();
         }
+
         // 初始化数据服务线程
         clientService = new Thread(new ClientService(), "Client");
         HttpClient.init();

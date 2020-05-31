@@ -205,7 +205,6 @@ public class AhoCorasickAutomation {
                 }
             }
         }
-        i++;
         return flag ? i : -i;
     }
 }
