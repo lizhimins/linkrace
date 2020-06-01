@@ -28,11 +28,10 @@ public class HttpClient extends Thread {
     private static final String HOST = "10.66.1.107";
     private static final int PORT = 8004;
     // 可以调整的常量
-    private static final byte LOG_SEPARATOR = (byte) '|';
-    private static final byte LINE_SEPARATOR = (byte) '\n'; // 行尾分隔符
     protected static final int BYTES_LENGTH = 8192 * 1024; // ByteBuf 最大长度
     protected static final int BUCKETS_NUM = 0x01 << 20; // 100万
     protected static final int WINDOW_SIZE = 20000; // 窗口的大小
+    protected static final int BLOCK_SIZE = 8192;
     // 文件的总长度
     protected static long contentLength = 0;
 
@@ -68,122 +67,6 @@ public class HttpClient extends Thread {
             nodes[i] = new Node();
         }
     }
-//    public void pullData() throws IOException {
-//        log.info("Client pull data start... Data path: " + path);
-//        URL url = new URL(path);
-//        HttpURLConnection httpConnection = (HttpURLConnection) url.openConnection(Proxy.NO_PROXY);
-//        // httpConnection.setRequestProperty("range","bytes=14517359-14517659");
-//        InputStream input = httpConnection.getInputStream();
-//
-//        // 初始化左右指针, 空出第一小段数据以备复制
-//        nowOffset = LENGTH_PER_READ;
-//        preOffset = LENGTH_PER_READ;
-//        logOffset = LENGTH_PER_READ;
-//        roundOffset = 0L;
-//
-//        int readByteCount = input.read(bytes, logOffset, LENGTH_PER_READ);
-//        logOffset += readByteCount;
-//
-//        while (true) {
-//            // 尝试读入一次
-//            readByteCount = input.read(bytes, logOffset, LENGTH_PER_READ);
-//
-//            // 文件结束退出
-//            if (readByteCount == -1) {
-//                break;
-//            }
-//
-//            // 日志坐标右移
-//            logOffset += readByteCount;
-//
-//            while (nowOffset + LENGTH_PER_READ < logOffset) {
-//                preOffset = nowOffset;
-//
-//                // 调试用延迟
-////                try {
-////                    TimeUnit.MILLISECONDS.sleep(1);
-////                } catch (InterruptedException e) {
-////                    e.printStackTrace();
-////                }
-//
-//                // traceId 部分处理
-//                pos = 0;
-//                while (bytes[nowOffset] != LOG_SEPARATOR) {
-//                    traceId[pos] = bytes[nowOffset];
-//                    pos++;
-//                    nowOffset++;
-//                }
-//                traceId[pos] = (byte) '\n';
-//
-//                // System.out.print(StringUtil.byteToString(traceId) + " ");
-//
-//                // 计算桶的索引
-//                bucketIndex = StringUtil.byteToHex(traceId, 0, 5);
-//                // System.out.println(String.format("index: %d ", bucketIndex));
-//
-//                // 将 traceId
-//                boolean isSame = buckets[bucketIndex].isSameTraceId(traceId);
-//
-//                if (!isSame) {
-//                    buckets[bucketIndex].setTraceId(traceId);
-//                }
-//
-//                // 滑过中间部分
-//                for (int sep = 0; sep < 8; nowOffset++) {
-//                    if (bytes[nowOffset] == LOG_SEPARATOR) {
-//                        sep++;
-//                    }
-//                }
-//
-//                nowOffset = AhoCorasickAutomation.find(bytes, nowOffset - 1);
-//
-//                // 返回值 < 0, 说明当前 traceId 有问题
-//                if (nowOffset < 0) {
-//                    // System.out.println("No");
-//                    nowOffset = -nowOffset;
-//                    errorCount.incrementAndGet();
-//                    long start = roundOffset + preOffset - LENGTH_PER_READ;
-//                    long end = roundOffset + nowOffset - LENGTH_PER_READ;
-//                    buckets[bucketIndex].addNewSpan(start, end, true);
-//                } else {
-//                    // System.out.println("Yes");
-//                    long start = roundOffset + preOffset - LENGTH_PER_READ;
-//                    long end = roundOffset + nowOffset - LENGTH_PER_READ;
-//                    buckets[bucketIndex].addNewSpan(start, end, false);
-//                }
-//
-//                // 窗口操作, 当前写 nodeIndex
-//                // 先取出数据
-//                int preBucketIndex = nodes[nodeIndex].bucketIndex;
-//                long preStartOffset = nodes[nodeIndex].startOffset;
-//
-//                // 如果已经有数据了
-//                if (preBucketIndex != -1) {
-//                    buckets[preBucketIndex].checkAndUpload(preStartOffset);
-//                }
-//                nodes[nodeIndex].bucketIndex = bucketIndex;
-//                nodes[nodeIndex].startOffset = preOffset;
-//                nodeIndex = (nodeIndex + 1) % WINDOW_SIZE;
-//
-//                nowOffset++;
-//            }
-//
-//            // 如果太长了要从头开始写
-//            if (logOffset > BYTES_LENGTH + LENGTH_PER_READ) {
-//                // 拷贝末尾的数据
-//                for (int i = nowOffset; i < logOffset; i++) {
-//                    bytes[i - BYTES_LENGTH] = bytes[i];
-//                }
-//                nowOffset -= BYTES_LENGTH;
-//                logOffset -= BYTES_LENGTH;
-//                roundOffset += BYTES_LENGTH;
-//                // log.info("rewrite");
-//            }
-//        }
-//        log.info("Client pull data finish...");
-//        log.info("errorCount: " + errorCount);
-//        // log.info("traceCount: " + traceCount.size());
-//    }
 
     public void pullData() {
         DefaultFullHttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, uri.toASCIIString());
