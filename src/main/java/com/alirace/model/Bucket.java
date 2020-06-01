@@ -11,8 +11,8 @@ public class Bucket {
 
     private int index = 0;
 
-    private long[] start = new long[64];
-    private long[] end = new long[64];
+    private long[] start = new long[48];
+    private long[] end = new long[48];
 
     public Bucket() {
     }
@@ -73,7 +73,7 @@ public class Bucket {
     public void checkAndUpload(long preBucketOffset) {
         if (isError && start[index] != preBucketOffset) {
             // System.out.println(getQueryString());
-            HttpClient.query(getQueryString());
+            //HttpClient.query(getQueryString());
             init();
         }
     }

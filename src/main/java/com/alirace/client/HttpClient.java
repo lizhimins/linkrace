@@ -33,35 +33,35 @@ public class HttpClient extends Thread {
     protected static final int BYTES_LENGTH = 8192 * 1024; // ByteBuf 最大长度
     protected static final int BUCKETS_NUM = 0x01 << 20; // 100万
     protected static final int WINDOW_SIZE = 20000; // 窗口的大小
+    // 文件的总长度
+    protected static long contentLength = 0;
+
     private static Bootstrap bootstrap;
-    private static ChannelFuture future;
+    private static List<ChannelFuture> futureList;
     // 数据获取地址, 由 CommonController 传入
     private static URI uri;
-    private int preOffset = 0; // 起始偏移
-    private int nowOffset = 0; // 当前偏移
-    private int logOffset = 0; // 日志偏移
-    private long roundOffset = 0; // 真实偏移
 
-    // 保存 traceId
-    private int pos = 0;
-    private byte[] traceId = new byte[32];
-    private int bucketIndex = 0;
+    private int threadIndex = 0; // 当前线程编号
+    private long startOffset = 0;
+    private long finishOffset = 0;
 
-    // 树索引
-    private Bucket[] buckets = new Bucket[BUCKETS_NUM];
+    // 数据索引
+    private static Bucket[] buckets = new Bucket[BUCKETS_NUM];
 
     // 窗口
     private int nodeIndex;
     private Node[] nodes = new Node[WINDOW_SIZE];
 
-    // 构造函数, 完成初始化任务
-    public HttpClient(String name) {
-        super(name);
-
-        log.info("Bucket initializing start..." + name);
+    public static void initBucket() {
+        log.info("Bucket initializing start...");
         for (int i = 0; i < BUCKETS_NUM; i++) {
             buckets[i] = new Bucket();
         }
+    }
+
+    // 构造函数, 完成初始化任务
+    public HttpClient(String name) {
+        super(name);
 
         log.info("Windows initializing start..." + name);
         for (int i = 0; i < WINDOW_SIZE; i++) {
@@ -186,20 +186,14 @@ public class HttpClient extends Thread {
 //    }
 
     public void pullData() {
-        log.info(this.getName() + "start pull data...");
         DefaultFullHttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, uri.toASCIIString());
         // 构建http请求
         request.headers().set(HttpHeaderNames.HOST, "localhost");
         request.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderNames.CONNECTION);
         request.headers().set(HttpHeaderNames.CONTENT_LENGTH, request.content().readableBytes());
-        request.headers().set(HttpHeaderNames.RANGE, "bytes=1-2000");
+        request.headers().set(HttpHeaderNames.RANGE, String.format("bytes=%d-%d", startOffset, finishOffset));
         // 发送http请求
-        future.channel().writeAndFlush(request).addListener(new ChannelFutureListener() {
-            @Override
-            public void operationComplete(ChannelFuture future) throws Exception {
-                // System.out.println(future);
-            }
-        });
+        futureList.get(threadIndex).channel().writeAndFlush(request);
     }
 
     public static void query(String requestOffset) {
@@ -208,15 +202,11 @@ public class HttpClient extends Thread {
         // 构建http请求
         request.headers().set(HttpHeaderNames.HOST, "localhost");
         request.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderNames.CONNECTION);
+        request.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
         request.headers().set(HttpHeaderNames.CONTENT_LENGTH, request.content().readableBytes());
         request.headers().set(HttpHeaderNames.RANGE, requestOffset);
         // 发送http请求
-        future.channel().writeAndFlush(request).addListener(new ChannelFutureListener() {
-            @Override
-            public void operationComplete(ChannelFuture future) throws Exception {
-                // System.out.println(future);
-            }
-        });
+        futureList.get(futureList.size() - 1).channel().writeAndFlush(request);
     }
 
     public static void setUri(String filePath) throws URISyntaxException {
@@ -226,7 +216,7 @@ public class HttpClient extends Thread {
     // 初始化实际线程
     public static List<HttpClient> init(int nThreads) {
         log.info("HttpClient initializing start...");
-        EventLoopGroup workerGroup = new NioEventLoopGroup(nThreads);
+        EventLoopGroup workerGroup = new NioEventLoopGroup(nThreads + 1);
         try {
             bootstrap = new Bootstrap();
             bootstrap.group(workerGroup)
@@ -251,51 +241,90 @@ public class HttpClient extends Thread {
         List<HttpClient> threads = new ArrayList<>();
         for (int i = 0; i < nThreads; i++) {
             HttpClient httpClient = new HttpClient("HttpClient" + i);
+            httpClient.setThreadIndex(i);
             threads.add(httpClient);
         }
+
+        futureList = new ArrayList<>(nThreads + 1);
         return threads;
     }
 
+    public static void getFileLength() throws InterruptedException {
+        DefaultFullHttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.HEAD, uri.toASCIIString());
+        // 构建http请求
+        request.headers().set(HttpHeaderNames.HOST, "localhost");
+        request.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderNames.CONNECTION);
+        request.headers().set(HttpHeaderNames.CONTENT_LENGTH, request.content().readableBytes());
+        futureList.get(futureList.size() - 1).channel().writeAndFlush(request).sync();
+    }
+
     // 自动重连
-    public static void doConnect() throws InterruptedException {
-        if (future != null && future.channel() != null && future.channel().isActive()) {
-            return;
-        }
-        future = bootstrap.connect(HOST, PORT).sync();
-        future.addListener(new ChannelFutureListener() {
-            @Override
-            public void operationComplete(ChannelFuture future) throws Exception {
-                if (future.isSuccess()) {
-                    log.info("Connect to http server successfully!");
-                } else {
-                    // log.info("Failed to connect to server, try connect after 1s.");
-                    future.channel().eventLoop().schedule(new Runnable() {
-                        @Override
-                        public void run() {
-                            try {
-                                doConnect();
-                            } catch (InterruptedException e) {
-                                e.printStackTrace();
-                            }
-                        }
-                    }, 1000, TimeUnit.MILLISECONDS);
+    public static void doConnect(int nThreads) throws InterruptedException {
+        for (int i = 0; i < nThreads + 1; i++) {
+//            if (future1 != null && future1.channel() != null && future1.channel().isActive()) {
+//                return;
+//            }
+            ChannelFuture future = bootstrap.connect(HOST, PORT).sync();
+            future.addListener(new ChannelFutureListener() {
+                @Override
+                public void operationComplete(ChannelFuture future) throws Exception {
+                    if (future.isSuccess()) {
+                        log.info(String.format("Connect to http server successfully!"));
+                    }
                 }
-            }
-        });
+            });
+            futureList.add(future);
+        }
     }
 
     @Override
     public void run() {
-        log.info("start success..");
+        log.info(String.format("Http Client start pull data, %d-%d", startOffset, finishOffset));
         pullData();
     }
 
     public static void main(String[] args) throws Exception {
-//        HttpClient.init(1);
-//        HttpClient.connect("10.66.1.107", 8004);
-//        uri = new URI("http://10.66.1.107:8004/trace1.data");
-//        query("bytes=0-2000000");
+
+        HttpClient.init(2);
+        HttpClient.doConnect(2);
+        uri = new URI("http://10.66.1.107:8004/trace1.data");
+
+        HttpClient httpClient1 = new HttpClient("Client");
+        httpClient1.setThreadIndex(0);
+        httpClient1.setStartOffset(200);
+        httpClient1.setFinishOffset(20000);
+        httpClient1.pullData();
+
+        HttpClient httpClient2 = new HttpClient("Client");
+        httpClient2.setThreadIndex(1);
+        httpClient2.setStartOffset(800);
+        httpClient1.setFinishOffset(33000);
+        httpClient2.pullData();
+
+        query("bytes=0-10000");
+//        query("bytes=80001-800000");
+
 //        query("bytes=14517359-14517659");
 //        query("bytes=14517359-14517659");
+    }
+
+    public long getStartOffset() {
+        return startOffset;
+    }
+
+    public void setStartOffset(long startOffset) {
+        this.startOffset = startOffset;
+    }
+
+    public long getFinishOffset() {
+        return finishOffset;
+    }
+
+    public void setFinishOffset(long finishOffset) {
+        this.finishOffset = finishOffset;
+    }
+
+    public void setThreadIndex(int threadIndex) {
+        this.threadIndex = threadIndex;
     }
 }

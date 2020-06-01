@@ -36,8 +36,8 @@ public class ClientService implements Runnable {
     private static ChannelFuture future;
 
     // 实际执行任务的线程
-    private static final int THREAD_NUM = 1;
-    private static List<HttpClient> threads;
+    private static final int THREAD_NUM = 2;
+    public static List<HttpClient> threads;
 
     // 精确一次上传
     private static HashMap<String /*traceId*/, AtomicBoolean /*isUpload*/> waitArea = new HashMap<>();
@@ -129,7 +129,7 @@ public class ClientService implements Runnable {
     }
 
     // 表示初始化
-    public static void init() throws URISyntaxException {
+    public static void start() throws URISyntaxException {
         log.info("Client initializing start...");
 
         // 监控服务
@@ -137,17 +137,31 @@ public class ClientService implements Runnable {
 
         // 初始化数据服务线程
         threads = HttpClient.init(THREAD_NUM);
+        HttpClient.initBucket();
+//        Thread thread = new Thread(new ClientService(), "Client");
+//        thread.start();
 
-        // 在最后启动 netty 进行通信
+        // 启动 netty 进行通信
         startNetty();
     }
 
     // 单例
     public static void startPullHttpData(String filePath) throws InterruptedException, URISyntaxException {
         HttpClient.setUri(filePath);
-        HttpClient.doConnect();
+        HttpClient.doConnect(THREAD_NUM);
+        HttpClient.getFileLength();
+    }
+
+    public static void startThread() {
         for (int i = 0; i < THREAD_NUM; i++) {
-            threads.get(i).start();
+            HttpClient httpClient = threads.get(i);
+            long blockLength = HttpClient.contentLength / THREAD_NUM;
+            httpClient.setStartOffset(blockLength * i);
+            httpClient.setFinishOffset(blockLength * (i + 1) - 1);
+            if (i == THREAD_NUM - 1) {
+                httpClient.setFinishOffset(HttpClient.contentLength - 1);
+            }
+            httpClient.start();
         }
     }
 
