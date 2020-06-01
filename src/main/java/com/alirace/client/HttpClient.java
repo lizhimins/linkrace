@@ -45,7 +45,7 @@ public class HttpClient extends Thread {
     private long finishOffset = 0;
 
     // 数据索引
-    private static Bucket[] buckets = new Bucket[BUCKETS_NUM];
+    protected static Bucket[] buckets = new Bucket[BUCKETS_NUM];
 
     // 窗口
     private int nodeIndex;

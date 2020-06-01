@@ -1,5 +1,6 @@
 package com.alirace.client;
 
+import com.alirace.util.AhoCorasickAutomation;
 import com.alirace.util.StringUtil;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.CompositeByteBuf;
@@ -29,7 +30,6 @@ public class HttpClientHandler extends ChannelInboundHandlerAdapter {
 
     private long preOffset = -1; // 起始偏移
     private long nowOffset = -1; // 当前偏移
-    private long logOffset = -1; // 日志偏移
 
     // 保存 traceId
     private int pos = 0;
@@ -41,12 +41,12 @@ public class HttpClientHandler extends ChannelInboundHandlerAdapter {
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         if (msg instanceof HttpContent) {
-            // 调试用延迟
-            try {
-                TimeUnit.MILLISECONDS.sleep(10);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
+//            // 调试用延迟
+//            try {
+//                TimeUnit.MILLISECONDS.sleep(10);
+//            } catch (InterruptedException e) {
+//                e.printStackTrace();
+//            }
 
             HttpContent httpContent = (HttpContent) msg;
             // log.info("packet: " + httpContent.content().writerIndex() + " ");
@@ -63,19 +63,17 @@ public class HttpClientHandler extends ChannelInboundHandlerAdapter {
                 compositeByteBuf.addComponent(true, content);
                 preOffset = startOffset;
                 nowOffset = startOffset;
-                logOffset = startOffset + content.writerIndex();
                 return;
             }
 
             // 加入新的
             compositeByteBuf.addComponent(true, content);
-            logOffset += content.capacity();
 
-            if (compositeByteBuf.numComponents() > 20) {
+            if (compositeByteBuf.numComponents() > 1000) {
                 compositeByteBuf.discardReadBytes();
             }
 
-            log.info(compositeByteBuf.toString());
+            // log.info(compositeByteBuf.toString());
 
             // 如果是从中间开始的话要丢弃半条日志
             if (preOffset == startOffset && startOffset != 0) {
@@ -89,9 +87,9 @@ public class HttpClientHandler extends ChannelInboundHandlerAdapter {
 //                 compositeByteBuf.discardReadBytes();
 //            }
 
-            while (nowOffset + BLOCK_SIZE < logOffset
-                    && compositeByteBuf.readerIndex() + BLOCK_SIZE < compositeByteBuf.writerIndex()) {
+            while (compositeByteBuf.readerIndex() + BLOCK_SIZE < compositeByteBuf.writerIndex()) {
                 preOffset = nowOffset;
+                int start = compositeByteBuf.readerIndex();
 
                 // traceId 部分处理
                 pos = 0;
@@ -101,8 +99,40 @@ public class HttpClientHandler extends ChannelInboundHandlerAdapter {
                     nowOffset++;
                 }
                 traceId[pos] = LINE_SEPARATOR; // 行尾
+                bucketIndex = StringUtil.byteToHex(traceId, 0, 5);
 
                 // System.out.println(StringUtil.byteToString(traceId) + " ");
+
+                // 滑过中间部分
+                for (int sep = 0; sep < 8; ) {
+                    if (compositeByteBuf.readByte() == LOG_SEPARATOR) {
+                        sep++;
+                    }
+                }
+
+//                if (AhoCorasickAutomation.find(compositeByteBuf)) {
+//                    log.info("NO");
+//                } else {
+//                    log.info("YES");
+//                }
+
+                HttpClient.buckets[bucketIndex].addNewSpan(preOffset,
+                        compositeByteBuf.readerIndex() - start + preOffset, true);
+//
+//                // 返回值 < 0, 说明当前 traceId 有问题
+//                if (nowOffset < 0) {
+//                    // System.out.println("No");
+//                    nowOffset = -nowOffset;
+//                    errorCount.incrementAndGet();
+//                    long start = roundOffset + preOffset - LENGTH_PER_READ;
+//                    long end = roundOffset + nowOffset - LENGTH_PER_READ;
+//                    buckets[bucketIndex].addNewSpan(start, end, true);
+//                } else {
+//                    // System.out.println("Yes");
+//                    long start = roundOffset + preOffset - LENGTH_PER_READ;
+//                    long end = roundOffset + nowOffset - LENGTH_PER_READ;
+//                    buckets[bucketIndex].addNewSpan(start, end, false);
+//                }
 
                 while ((b = compositeByteBuf.readByte()) != LINE_SEPARATOR) {
                     nowOffset++;
@@ -114,7 +144,7 @@ public class HttpClientHandler extends ChannelInboundHandlerAdapter {
 
         if (msg instanceof HttpResponse) {
             HttpResponse response = (HttpResponse) msg;
-            compositeByteBuf = ctx.alloc().compositeBuffer(256);
+            compositeByteBuf = ctx.alloc().compositeBuffer(1024);
 
             if (HttpUtil.isContentLengthSet(response) && HttpClient.contentLength == 0) {
                 HttpClient.contentLength = HttpUtil.getContentLength(response);
