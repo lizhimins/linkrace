@@ -9,6 +9,8 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.print.DocFlavor;
+
 import static com.alirace.client.ClientService.doConnect;
 
 /**
@@ -28,7 +30,8 @@ public class ClientHandler extends SimpleChannelInboundHandler<Object> {
             // String traceId = new String(message.getBody());
             // 调用查询服务上传查询结果
             // ClientService.queryRecord(traceId);
-            ClientMonitor.queryCount.incrementAndGet();
+            String traceId = new String(message.getBody());
+            ClientService.queryRecord(traceId);
             return;
         }
 

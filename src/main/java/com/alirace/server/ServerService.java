@@ -8,6 +8,7 @@ import com.alirace.netty.MyEncoder;
 import com.alirace.util.HttpUtil;
 import com.alirace.util.MD5Util;
 import io.netty.bootstrap.ServerBootstrap;
+import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
@@ -34,7 +35,7 @@ public class ServerService implements Runnable {
     private static final Logger log = LoggerFactory.getLogger(ServerService.class);
     // 用来存放待合并的数据 traceId -> record
     private static final int MAX_HASHMAP_SIZE = 1024 * 16;
-    public static ConcurrentHashMap<String, Record> mergeMap = new ConcurrentHashMap(MAX_HASHMAP_SIZE);
+    public static ConcurrentHashMap<String, ByteBuf> mergeMap = new ConcurrentHashMap(MAX_HASHMAP_SIZE);
     // 用来存放剩下的数据 traceId -> md5
     public static ConcurrentHashMap<String, String> resultMap = new ConcurrentHashMap(MAX_HASHMAP_SIZE);
     // 发出的查询数量 和 收到的响应数量, 需要支持并发
@@ -87,20 +88,24 @@ public class ServerService implements Runnable {
     }
 
     // 结果转移 + 刷盘
-    public static void flushResult(String traceId, Record record) {
-        if (traceId == null || record == null || record.getList() == null || record.getList().size() == 0) {
-            return;
+    public static void flushResult(String traceId, ByteBuf byteBuf) {
+        String total = new String(byteBuf.array());
+        String[] trace = total.split("\n");
+        Record record = new Record(traceId);
+        for (int i = 0; i < trace.length; i++) {
+            if (trace[i] == null || (int) trace[i].charAt(0) == 0 || trace[i].startsWith("\n") || trace[i].startsWith("\r")) {
+                continue;
+            } else {
+                record.addTraceLog(trace[i]);
+                // log.info(trace[i]);
+//                if (traceId.equals("5df8f5771d29e445")) {
+//                    log.info(trace[i]);
+//                }
+            }
         }
-        // log.info(record.toString());
-        Iterator<String> iterator = record.getList().iterator();
-        StringBuffer sb = new StringBuffer();
-        while (iterator.hasNext()) {
-            sb.append(iterator.next().toString());
-            sb.append("\n");
-            iterator.remove();
-        }
-        String md5 = MD5Util.strToMd5(sb.toString()).toUpperCase();
-        // log.info(String.format("TraceId: %16s, MD5: %32s", traceId, md5));
+        byte[] bytes = record.cmpAndMerge();
+        String md5 = MD5Util.byteToMD5(bytes);
+        log.info(String.format("TraceId: %16s, MD5: %32s", traceId, md5));
         resultMap.put(traceId, md5);
         mergeMap.remove(traceId);
     }

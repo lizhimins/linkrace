@@ -1,7 +1,11 @@
 package com.alirace.model;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Iterator;
 import java.util.LinkedList;
 
 public class Record {
@@ -22,7 +26,7 @@ public class Record {
     }
 
     public void addTraceLog(String traceLog) {
-        if (traceLog == null || traceLog.length() == 0) {
+        if (traceLog == null || traceLog.length() < 16) {
             return;
         }
 
@@ -44,6 +48,24 @@ public class Record {
                 return (int) (TraceLog.getTime(o1) - TraceLog.getTime(o2));
             }
         });
+    }
+
+    public byte[] cmpAndMerge() {
+        Collections.sort(list, new Comparator<String>() {
+            @Override
+            public int compare(String o1, String o2) {
+                return (int) (TraceLog.getTime(o1) - TraceLog.getTime(o2));
+            }
+        });
+        ByteBuf byteBuf = Unpooled.buffer(4096);
+        Iterator<String> iterator = list.iterator();
+        while (iterator.hasNext()) {
+            String value = iterator.next();
+            byteBuf.writeBytes(value.getBytes());
+            byteBuf.writeByte((byte) (int) '\n');
+            System.out.println(value);
+        }
+        return byteBuf.array();
     }
 
     @Override

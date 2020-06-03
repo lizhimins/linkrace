@@ -16,7 +16,6 @@ import static com.alirace.Application.CLIENT_PROCESS_PORT2;
 @RestController
 public class CommonController {
 
-    private static final String HOST = "localhost";
     // 程序是否准备完成
     public static volatile AtomicBoolean isReady = new AtomicBoolean(false);
     private static Integer DATA_SOURCE_PORT = 0;

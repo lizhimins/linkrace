@@ -5,6 +5,9 @@ import com.alirace.model.Message;
 import com.alirace.model.MessageType;
 import com.alirace.model.Record;
 import com.alirace.util.SerializeUtil;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.buffer.UnpooledHeapByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
@@ -57,18 +60,17 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
                 }
             }
 
-//            Record result = mergeMap.get(traceId);
-//            // 如果当前内存中不包含 traceId 的调用链路就放入内存, 如果存在的话就合并调用链, 然后刷盘
-//            if (result == null) {
-//                mergeMap.put(traceId, record);
-//            } else {
-//                result.merge(record);
-//                ServerService.flushResult(traceId, result);
-//            }
+            // 如果当前内存中不包含 traceId 的调用链路就放入内存, 如果存在的话就合并调用链, 然后刷盘
+            ByteBuf byteBuf = mergeMap.putIfAbsent(traceId.toString(), Unpooled.buffer(1024));
+            if (byteBuf != null) {
+                byteBuf.writeBytes(message.getBody());
+                ServerService.flushResult(traceId.toString(), byteBuf);
+            }
             return;
         }
 
-//        if (MessageType.PASS.getValue() == message.getType()) {
+        if (MessageType.RESPONSE.getValue() == message.getType()) {
+            queryResponseCount.incrementAndGet();
 //            // 反序列化得到数据
 //            Record record = SerializeUtil.deserialize(message.getBody(), Record.class);
 //            String traceId = record.getTraceId();
@@ -80,7 +82,7 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
 //                result.merge(record);
 //                ServerService.flushResult(traceId, result);
 //            }
-//        }
+        }
 
 //        // 如果日志流已经上报完, 只等数据回查的话
 //        if (MessageType.FINISH.getValue() == message.getType()) {

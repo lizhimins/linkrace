@@ -20,6 +20,7 @@ import okhttp3.internal.connection.StreamAllocation;
 import org.checkerframework.checker.units.qual.C;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.web.bind.annotation.RequestHeader;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -39,7 +40,7 @@ public class ClientService extends Thread {
 
     private static final Logger log = LoggerFactory.getLogger(ClientService.class);
 
-    protected static final int nThreads = 2;
+    protected static final int nThreads = 1;
     protected static List<ClientService> services;
 
     // 通信相关参数配置
@@ -255,9 +256,21 @@ public class ClientService extends Thread {
     }
 
     // 查询
-    public static void queryRecord(String traceId) throws InterruptedException {
+    public static void queryRecord(String traceId) throws InterruptedException, IOException {
         queryCount.incrementAndGet();
         // TODO:
+        // log.info(traceId);
+
+        // TODO: 获得 OFFSET
+        String requestOffset = "0-30";
+        Request request = new Request.Builder()
+                .url(url)
+                .header("range", requestOffset)
+                .build();
+        // Response response = client.newCall(request).execute();
+
+        Message message = new Message(MessageType.RESPONSE.getValue(), "0123456789abcdef".getBytes());
+        response(message);
     }
 
     // 上传调用链
@@ -356,10 +369,10 @@ public class ClientService extends Thread {
         for (int i = 0; i < BUCKETS_NUM; i++) {
             buckets[i] = new Bucket();
         }
-//
-//        connectionPool = new ConnectionPool(4, 5, TimeUnit.MINUTES);
-//        connectionPool.
-        // HttpClient.init();
+
+        client = new OkHttpClient.Builder()
+                .connectionPool(new ConnectionPool(2, 5, TimeUnit.MINUTES))
+                .build();
 
         // 在最后启动 netty 进行通信
         startNetty();
@@ -386,11 +399,10 @@ public class ClientService extends Thread {
         httpConnection.disconnect();
     }
 
-    private static OkHttpClient client = new OkHttpClient.Builder()
-            .connectionPool(new ConnectionPool(2, 5, TimeUnit.MINUTES))
-            .build();
+    private static OkHttpClient client;
 
     public static void query(String requestOffset) throws IOException {
+        log.info(requestOffset);
         Request request = new Request.Builder()
                 .url(url)
                 .header("range", requestOffset)
@@ -399,17 +411,22 @@ public class ClientService extends Thread {
 
         StringBuffer logs = new StringBuffer();
         String content = response.body().string();
+
         String[] split = content.split("\n");
+        log.info(split.length + " ");
         for (int i = 0; i < split.length; i++) {
             String line = split[i];
             if (line.length() == 0 || line.startsWith("\r") || line.startsWith("-") || line.startsWith("C")) {
                 continue;
             }
             // System.out.println(line);
+            log.info(line);
             logs.append(line);
+            logs.append("\n");
         }
 
         byte[] body = logs.toString().getBytes();
+        log.info(logs.toString());
 
         StringBuffer traceId = new StringBuffer(20);
         for (int i = 0; i < 20; i++) {
@@ -418,10 +435,10 @@ public class ClientService extends Thread {
             }
             traceId.append((char) (int) body[i]);
         }
-        log.info(traceId.toString());
+        // log.info(traceId.toString());
 
-        Message message = new Message(MessageType.UPLOAD.getValue(), body);
-        upload(message);
+        Message message = new Message(MessageType.UPLOAD.getValue(), logs.toString().getBytes());
+        // upload(message);
 //        byte[] bytes = response.body().bytes();
 //        int length = bytes.length;
 //        StringBuffer sb = new StringBuffer();
