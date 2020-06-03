@@ -2,7 +2,6 @@ package com.alirace.controller;
 
 import com.alirace.Application;
 import com.alirace.client.ClientService;
-import com.alirace.client.HttpClient;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -66,8 +65,8 @@ public class CommonController {
         if (isBeginning.compareAndSet(false, true)) {
             // 开始读入数据
             if (Application.isClientProcess()) {
-                // 传入地址即可
-                ClientService.startPullHttpData(getPath());
+                // 放入文件地址
+                ClientService.setPathAndPull(getPath());
             }
         }
         return "suc";

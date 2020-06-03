@@ -11,7 +11,6 @@ public class ByteBufToBytes {
 
     public ByteBufToBytes(int length) {
         temp = Unpooled.buffer(length);
-        temp = new UnpooledUnsafeDirectByteBuf(ByteBufAllocator.DEFAULT, 8192 * 1024, 8192 * 1024);
     }
 
     public void reading(ByteBuf datas) {

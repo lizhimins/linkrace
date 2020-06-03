@@ -38,70 +38,60 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
         // 如果是上传数据
         if (MessageType.UPLOAD.getValue() == message.getType()) {
             // 反序列化得到数据
-            Record record = SerializeUtil.deserialize(message.getBody(), Record.class);
-            String traceId = record.getTraceId();
-            // log.info(traceId);
+            byte[] body = message.getBody();
+            StringBuffer traceId = new StringBuffer(20);
+            for (int i = 0; i < 20; i++) {
+                if (body[i] == (byte) '|') {
+                    break;
+                }
+                traceId.append((char) (int) body[i]);
+            }
+            // log.info(traceId.toString());
+
             // 向其他机器广播查询请求
             for (Channel ch : group) {
                 if (ch != channel) {
                     queryRequestCount.incrementAndGet();
-                    Message query = new Message(MessageType.QUERY.getValue(), traceId.getBytes());
+                    Message query = new Message(MessageType.QUERY.getValue(), traceId.toString().getBytes());
                     ch.writeAndFlush(query);
                 }
             }
-            Record result = mergeMap.get(traceId);
-            // 如果当前内存中不包含 traceId 的调用链路就放入内存, 如果存在的话就合并调用链, 然后刷盘
-            if (result == null) {
-                mergeMap.put(traceId, record);
-            } else {
-                result.merge(record);
-                ServerService.flushResult(traceId, result);
-            }
+
+//            Record result = mergeMap.get(traceId);
+//            // 如果当前内存中不包含 traceId 的调用链路就放入内存, 如果存在的话就合并调用链, 然后刷盘
+//            if (result == null) {
+//                mergeMap.put(traceId, record);
+//            } else {
+//                result.merge(record);
+//                ServerService.flushResult(traceId, result);
+//            }
             return;
         }
 
-        if (MessageType.PASS.getValue() == message.getType()) {
-            // 反序列化得到数据
-            Record record = SerializeUtil.deserialize(message.getBody(), Record.class);
-            String traceId = record.getTraceId();
-            // log.info(traceId);
-            Record result = mergeMap.get(traceId);
-            if (result == null) {
-                mergeMap.put(traceId, record);
-            } else {
-                result.merge(record);
-                ServerService.flushResult(traceId, result);
-            }
-        }
+//        if (MessageType.PASS.getValue() == message.getType()) {
+//            // 反序列化得到数据
+//            Record record = SerializeUtil.deserialize(message.getBody(), Record.class);
+//            String traceId = record.getTraceId();
+//            // log.info(traceId);
+//            Record result = mergeMap.get(traceId);
+//            if (result == null) {
+//                mergeMap.put(traceId, record);
+//            } else {
+//                result.merge(record);
+//                ServerService.flushResult(traceId, result);
+//            }
+//        }
 
-        // 如果是进度数据
-        if (MessageType.STATUS.getValue() == message.getType()) {
-            for (Channel ch : group) {
-                if (ch != channel) {
-                    message.setType(MessageType.SYNC.getValue());
-                    ch.writeAndFlush(message);
-                }
-            }
-        }
-
-        // 如果是回复数据
-        if (MessageType.RESPONSE.getValue() == message.getType()) {
-            if (queryResponseCount.incrementAndGet() == queryRequestCount.get()
-                    && doneServicesCount.get() == TOTAL_SERVICES_COUNT) {
-                ServerService.uploadData();
-            }
-        }
-
-        // 如果日志流已经上报完, 只等数据回查的话
-        if (MessageType.FINISH.getValue() == message.getType()) {
-            if (doneServicesCount.incrementAndGet() == TOTAL_SERVICES_COUNT) {
-                // 广播结束信号
-                for (Channel ch : group) {
-                    Message query = new Message(MessageType.NO_MORE_UPLOAD.getValue(), "EOF".getBytes());
-                    ch.writeAndFlush(query);
-                }
-            }
-        }
+//        // 如果日志流已经上报完, 只等数据回查的话
+//        if (MessageType.FINISH.getValue() == message.getType()) {
+//            if (doneServicesCount.incrementAndGet() == TOTAL_SERVICES_COUNT) {
+//                // 广播结束信号
+//                for (Channel ch : group) {
+//                    Message query = new Message(MessageType.NO_MORE_UPLOAD.getValue(), "EOF".getBytes());
+//                    ch.writeAndFlush(query);
+//                }
+//            }
+//        }
     }
 
     @Override
@@ -115,9 +105,9 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
         group.add(channel);
         log.info(String.format("Now %d client connected to this server, %s", group.size(), channel.remoteAddress()));
         if (group.size() == MACHINE_NUM) {
-            // 向所有机器广播查询请求
+            // 向所有机器广播 READY 信号
             for (Channel ch : group) {
-                Message query = new Message(MessageType.START.getValue(), "START".getBytes());
+                Message query = new Message(MessageType.READY.getValue(), "READY".getBytes());
                 ch.writeAndFlush(query);
             }
             // 标记 ready 接口

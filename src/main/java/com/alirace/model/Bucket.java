@@ -1,7 +1,13 @@
 package com.alirace.model;
 
+import com.alirace.client.ClientService;
 import com.alirace.client.HttpClient;
 
+import java.io.IOException;
+
+/**
+ * 前缀树容器类
+ */
 public class Bucket {
 
     private byte[] traceId = new byte[18];
@@ -11,8 +17,8 @@ public class Bucket {
 
     private int index = 0;
 
-    private long[] start = new long[48];
-    private long[] end = new long[48];
+    private long[] start = new long[64];
+    private long[] end = new long[64];
 
     public Bucket() {
     }
@@ -61,6 +67,7 @@ public class Bucket {
 
     public String getQueryString() {
         StringBuffer sb = new StringBuffer();
+        sb.append("bytes=");
         for (int i = 0; i < index; i++) {
             sb.append(start[i]);
             sb.append("-");
@@ -70,10 +77,9 @@ public class Bucket {
         return sb.substring(0, sb.lastIndexOf(","));
     }
 
-    public void checkAndUpload(long preBucketOffset) {
+    public void checkAndUpload(long preBucketOffset) throws IOException {
         if (isError && start[index] != preBucketOffset) {
-            // System.out.println(getQueryString());
-            //HttpClient.query(getQueryString());
+            ClientService.query(getQueryString());
             init();
         }
     }

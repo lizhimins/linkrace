@@ -1,7 +1,5 @@
 package com.alirace.util;
 
-import io.netty.buffer.CompositeByteBuf;
-
 import java.util.*;
 
 public class AhoCorasickAutomation {
@@ -142,13 +140,14 @@ public class AhoCorasickAutomation {
      * 绝对值为 \n 的 offset
      */
     /*在文本串中查找所有的目标字符串*/
-    public static boolean find(CompositeByteBuf compositeByteBuf) {
+    public static int find(byte[] bytes, int offset) {
         boolean flag = true;
 
         Node curr = root;
-        int i = compositeByteBuf.readerIndex();
-        byte ch;
-        while ((ch = compositeByteBuf.readByte()) != (byte) '\n') {
+        int i = offset;
+        while (bytes[i] != (byte) '\n') {
+            /*文本串中的字符*/
+            byte ch = bytes[i];
             /*文本串中的字符和AC自动机中的字符进行比较*/
             if (curr.table[ch] != null) {
                 /*若相等，自动机进入下一状态*/
@@ -158,10 +157,10 @@ public class AhoCorasickAutomation {
                     int index = i - curr.str.length() + 1;
                     // System.out.println("Find: " + curr.str + " " + index);
                     if (curr.str.charAt(1) == 'h') {
-                        if (compositeByteBuf.getByte(i + 1) == (byte) (int) '2'
-                                && compositeByteBuf.getByte(i + 2) == (byte) (int) '0'
-                                && compositeByteBuf.getByte(i + 3) == (byte) (int) '0'
-                                && (compositeByteBuf.getByte(i + 4) == (byte) (int) '&' || compositeByteBuf.getByte(i + 4) == (byte) (int) '\n')) {
+                        if (bytes[i + 1] == (byte) (int) '2'
+                                && bytes[i + 2] == (byte) (int) '0'
+                                && bytes[i + 3] == (byte) (int) '0'
+                                && (bytes[i + 4] == (byte) (int) '&' || bytes[i + 4] == (byte) (int) '\n')) {
                             // 完全匹配
                         } else {
                             flag = false;
@@ -180,10 +179,10 @@ public class AhoCorasickAutomation {
                     int index = i - i - curr.fail.str.length() + 1;
                     // System.out.println("Find: " + curr.str + " " + index);
                     if (curr.str.charAt(1) == 'h') {
-                        if (compositeByteBuf.getByte(i + 1) == (byte) (int) '2'
-                                && compositeByteBuf.getByte(i + 2) == (byte) (int) '0'
-                                && compositeByteBuf.getByte(i + 3) == (byte) (int) '0'
-                                && (compositeByteBuf.getByte(i + 4) == (byte) (int) '&' || compositeByteBuf.getByte(i + 4) == (byte) (int) '\n')) {
+                        if (bytes[i + 1] == (byte) (int) '2'
+                                && bytes[i + 2] == (byte) (int) '0'
+                                && bytes[i + 3] == (byte) (int) '0'
+                                && (bytes[i + 4] == (byte) (int) '&' || bytes[i + 4] == (byte) (int) '\n')) {
                             // 完全匹配
                         } else {
                             flag = false;
@@ -206,6 +205,6 @@ public class AhoCorasickAutomation {
                 }
             }
         }
-        return flag;
+        return flag ? i : -i;
     }
 }

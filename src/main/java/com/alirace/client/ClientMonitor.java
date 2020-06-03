@@ -15,8 +15,6 @@ public class ClientMonitor implements Runnable {
     public static AtomicLong queryCount = new AtomicLong(0L);
     // 被动上报 traceId 数量, 也就是查询数量
     public static AtomicLong responseCount = new AtomicLong(0L);
-    // 延迟响应数量
-    public static AtomicLong passCount = new AtomicLong(0L);
     // 错误总数
     public static AtomicLong errorCount = new AtomicLong(0L);
 
@@ -28,12 +26,10 @@ public class ClientMonitor implements Runnable {
 
     private void printStatus() {
         StringBuffer sb = new StringBuffer();
-//        sb.append(String.format("offset: %10s, ", getLogOffset()));
-//        sb.append(String.format("error: %8s, ", errorCount.get()));
-//        sb.append(String.format("upload: %5s, ", uploadCount.get()));
-//        sb.append(String.format("query: %5s, ", queryCount.get()));
-//        sb.append(String.format("response: %5s, ", responseCount.get()));
-//        sb.append(String.format("delay: %5s, ", passCount.get()));
+        sb.append(String.format("error: %8s, ", errorCount.get()));
+        sb.append(String.format("upload: %5s, ", uploadCount.get()));
+        sb.append(String.format("query: %5s, ", queryCount.get()));
+        sb.append(String.format("response: %5s, ", responseCount.get()));
         log.info(sb.toString());
     }
 
