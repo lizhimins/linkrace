@@ -67,6 +67,7 @@ public class ClientService extends Thread {
     private static final byte CR_SEPARATOR = (byte) '\r';
     private static final byte MINUS_SEPARATOR = (byte) '-';
     private static final byte LINE_SEPARATOR = (byte) '\n'; // key:value 分隔符
+    private static final byte C_SEPARATOR = (byte) 'C';
     private static final int LENGTH_PER_READ = 8192; // 每一次读 8kb
 
     // 控制偏移量
@@ -402,59 +403,43 @@ public class ClientService extends Thread {
     private static OkHttpClient client;
 
     public static void query(String requestOffset) throws IOException {
-        log.info(requestOffset);
+        // log.info(requestOffset);
         Request request = new Request.Builder()
                 .url(url)
                 .header("range", requestOffset)
                 .build();
-        Response response = client.newCall(request).execute();
 
-        StringBuffer logs = new StringBuffer();
-        String content = response.body().string();
+        // 返回的结果
+        byte[] bytes = client.newCall(request).execute().body().bytes();
 
-        String[] split = content.split("\n");
-        log.info(split.length + " ");
-        for (int i = 0; i < split.length; i++) {
-            String line = split[i];
-            if (line.length() == 0 || line.startsWith("\r") || line.startsWith("-") || line.startsWith("C")) {
-                continue;
+        // 结果合并处理
+        int index = 0, length = bytes.length;
+        byte[] result = new byte[length];
+        int pos = 0;
+
+        while (index < length) {
+            if (bytes[index] == LINE_SEPARATOR || bytes[index] == CR_SEPARATOR
+                    || bytes[index] == MINUS_SEPARATOR || bytes[index] == C_SEPARATOR) {
+                for ( ; index < length; index++) {
+                    if (bytes[index] == LINE_SEPARATOR) {
+                        break;
+                    }
+                }
+                index++;
+            } else {
+                for ( ; index < length; index++) {
+                    result[pos++] = bytes[index];
+                    if (bytes[index] == LINE_SEPARATOR) {
+                        break;
+                    }
+                }
+                index++;
             }
-            // System.out.println(line);
-            log.info(line);
-            logs.append(line);
-            logs.append("\n");
         }
+        // log.info(new String(result, 0, pos));
 
-        byte[] body = logs.toString().getBytes();
-        log.info(logs.toString());
-
-        StringBuffer traceId = new StringBuffer(20);
-        for (int i = 0; i < 20; i++) {
-            if (body[i] == (byte) '|') {
-                break;
-            }
-            traceId.append((char) (int) body[i]);
-        }
-        // log.info(traceId.toString());
-
-        Message message = new Message(MessageType.UPLOAD.getValue(), logs.toString().getBytes());
-        // upload(message);
-//        byte[] bytes = response.body().bytes();
-//        int length = bytes.length;
-//        StringBuffer sb = new StringBuffer();
-//        int left = 0; byte b;
-//        for (int i = 0; i < length; i++) {
-//            if ((b = bytes[i]) == LINE_SEPARATOR) {
-//                if (left + 2 > i || b == CR_SEPARATOR || b == MINUS_SEPARATOR || b == (byte) 'C') {
-//                    continue;
-//                } else {
-//                    for (int k=left; k<=i; k++) {
-//                        sb.append((char) (int) b);
-//                    }
-//                }
-//            }
-//        }
-//        System.out.println(sb.toString());
+        Message message = new Message(MessageType.UPLOAD.getValue(), new String(result, 0, pos).toString().getBytes());
+        upload(message);
 
 //        client.newCall(request).enqueue(new Callback() {
 //            @Override
