@@ -40,7 +40,7 @@ public class ClientService extends Thread {
 
     private static final Logger log = LoggerFactory.getLogger(ClientService.class);
 
-    protected static final int nThreads = 4;
+    protected static final int nThreads = 2;
     protected static List<ClientService> services;
 
     // 通信相关参数配置

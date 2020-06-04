@@ -125,8 +125,7 @@ public class Bucket {
                 this.isError = true;
             }
         }
-        Message message = new Message(MessageType.RESPONSE.getValue(), "1".getBytes());
-        ClientService.response(message);
+        // ClientService.response(message);
     }
 
     public void checkAndUpload(long endOffset) throws IOException {
