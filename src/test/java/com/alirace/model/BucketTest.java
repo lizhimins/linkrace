@@ -21,4 +21,11 @@ public class BucketTest {
 
     }
 
+    @Test
+    public void getTraceIdString() {
+        byte[] bytes = "0123456789abcde\n".getBytes();
+        Bucket bucket = new Bucket();
+        bucket.setTraceId(bytes);
+        System.out.println(bucket.getTraceIdString());
+    }
 }

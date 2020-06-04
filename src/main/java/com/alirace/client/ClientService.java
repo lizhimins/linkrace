@@ -40,7 +40,7 @@ public class ClientService extends Thread {
 
     private static final Logger log = LoggerFactory.getLogger(ClientService.class);
 
-    protected static final int nThreads = 1;
+    protected static final int nThreads = 2;
     protected static List<ClientService> services;
 
     // 通信相关参数配置
@@ -60,7 +60,7 @@ public class ClientService extends Thread {
     private static String path;
 
     // 精确一次上传
-    private static HashMap<String /*traceId*/, AtomicBoolean /*isUpload*/> waitArea = new HashMap<>();
+    public static ConcurrentHashMap<String, AtomicBoolean> waitArea = new ConcurrentHashMap<>();
 
     // 真实数据
     private static final byte LOG_SEPARATOR = (byte) '|';
@@ -261,8 +261,8 @@ public class ClientService extends Thread {
     public static void queryRecord(byte[] traceId) throws InterruptedException, IOException {
         queryCount.incrementAndGet();
         int bucketIndex = StringUtil.byteToHex(traceId, 0, 5);
-        log.info("query: " + new String(traceId));
-        buckets[bucketIndex].upload();
+        // log.info("query: " + new String(traceId));
+        buckets[bucketIndex].tryResponse();
     }
 
     // 上传调用链
@@ -273,7 +273,7 @@ public class ClientService extends Thread {
 
     // 查询响应
     public static void response(Message message) {
-        responseCount.incrementAndGet();
+        // responseCount.incrementAndGet();
         future.channel().writeAndFlush(message);
     }
 
@@ -483,7 +483,7 @@ public class ClientService extends Thread {
     public void run() {
         try {
             pullData();
-            log.info("errorCount: " + errorCount);
+            // log.info("errorCount: " + errorCount);
         } catch (IOException e) {
             e.printStackTrace();
         }

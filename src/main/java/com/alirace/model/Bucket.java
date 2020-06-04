@@ -1,9 +1,13 @@
 package com.alirace.model;
 
+import com.alirace.client.ClientMonitor;
 import com.alirace.client.ClientService;
-import com.alirace.client.HttpClient;
 
 import java.io.IOException;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import static com.alirace.client.ClientService.response;
+import static com.alirace.client.ClientService.waitArea;
 
 /**
  * 前缀树容器类
@@ -16,7 +20,7 @@ public class Bucket {
     private boolean isError = false;
     private boolean isDone = false;
 
-    private int index = 0;
+    private int index = -1;
 
     private long[] start = new long[64];
     private long[] end = new long[64];
@@ -32,17 +36,33 @@ public class Bucket {
         return traceId;
     }
 
+    public String getTraceIdString() {
+        StringBuffer sb = new StringBuffer(16);
+        for (int i = 0; i < traceId.length; i++) {
+            if (traceId[i] == (byte) (int) '\n') {
+                break;
+            }
+            sb.append((char) (int) traceId[i]);
+        }
+        return sb.toString();
+    }
+
     public void init() {
-        index = 0;
+        index = -1;
         isError = false;
         isDone = false;
     }
 
     // 硬拷贝 traceId, 逻辑删除偏移量
     public void setTraceId(byte[] traceId) {
-        for (int i = 0; i < 17; i++) {
+        int i;
+        for (i = 0; i < traceId.length; i++) {
+            if (traceId[i] == (byte) (int) '\n') {
+                break;
+            }
             this.traceId[i] = traceId[i];
         }
+        this.traceId[i] = (byte) (int) '\n';
         init();
     }
 
@@ -73,16 +93,16 @@ public class Bucket {
     }
 
     public void addNewSpan(long startOff, long endOff, boolean isError) {
+        index++;
         this.isError |= isError;
         this.start[index] = startOff;
         this.end[index] = endOff;
-        index++;
     }
 
     public String getQueryString() {
         StringBuffer sb = new StringBuffer();
         sb.append("bytes=");
-        for (int i = 0; i < index; i++) {
+        for (int i = 0; i <= index; i++) {
             sb.append(start[i]);
             sb.append("-");
             sb.append(end[i]);
@@ -91,24 +111,27 @@ public class Bucket {
         return sb.substring(0, sb.lastIndexOf(","));
     }
 
-    public void upload() throws IOException {
+    public void tryResponse() throws IOException {
+        ClientMonitor.responseCount.incrementAndGet();
         if (isDone) {
-            System.out.println("isDone1");
+            // System.out.println("isDone1");
             Message message = new Message(MessageType.RESPONSE.getValue(), "1".getBytes());
             ClientService.response(message);
         }
-//        byte[] bytes = ClientService.query(getQueryString());
-//        Message message = new Message(MessageType.RESPONSE.getValue(), bytes);
-//        ClientService.upload(message);
-//        init();
     }
 
     public void checkAndUpload(long endOffset) throws IOException {
         // System.out.println(endOffset + " " + end[index - 1]);
-        if (end[index - 1] == endOffset) {
+        if (index != -1 && end[index] == endOffset) {
             // System.out.print("DONE ");
             isDone = true;
             if (isError) {
+                AtomicBoolean flag = new AtomicBoolean(true);
+                AtomicBoolean result = waitArea.putIfAbsent(getTraceIdString(), flag);
+                if (result != null) {
+                    result.set(true);
+                    ClientMonitor.responseCount.incrementAndGet();
+                }
                 byte[] bytes = ClientService.query(getQueryString());
                 Message message = new Message(MessageType.UPLOAD.getValue(), bytes);
                 ClientService.upload(message);
