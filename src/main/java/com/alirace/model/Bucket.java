@@ -6,8 +6,6 @@ import com.alirace.client.ClientService;
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static com.alirace.client.ClientService.response;
-import static com.alirace.client.ClientService.waitArea;
 
 /**
  * 前缀树容器类
@@ -111,27 +109,31 @@ public class Bucket {
         return sb.substring(0, sb.lastIndexOf(","));
     }
 
-    public void tryResponse() throws IOException {
-        ClientMonitor.responseCount.incrementAndGet();
-        if (isDone) {
-            // System.out.println("isDone1");
+    public void tryResponse(String traceId) throws IOException {
+        // 尝试放进去
+        if (this.isError) {
+
             Message message = new Message(MessageType.RESPONSE.getValue(), "1".getBytes());
-            ClientService.response(message);
+            ClientService.upload(message);
+        } else {
+            if (isDone) {
+                byte[] bytes = ClientService.query(getQueryString());
+                Message message = new Message(MessageType.RESPONSE.getValue(), bytes);
+                ClientService.upload(message);
+                init();
+            } else {
+                this.isError = true;
+            }
         }
+        Message message = new Message(MessageType.RESPONSE.getValue(), "1".getBytes());
+        ClientService.response(message);
     }
 
     public void checkAndUpload(long endOffset) throws IOException {
-        // System.out.println(endOffset + " " + end[index - 1]);
         if (index != -1 && end[index] == endOffset) {
             // System.out.print("DONE ");
             isDone = true;
             if (isError) {
-                AtomicBoolean flag = new AtomicBoolean(true);
-                AtomicBoolean result = waitArea.putIfAbsent(getTraceIdString(), flag);
-                if (result != null) {
-                    result.set(true);
-                    ClientMonitor.responseCount.incrementAndGet();
-                }
                 byte[] bytes = ClientService.query(getQueryString());
                 Message message = new Message(MessageType.UPLOAD.getValue(), bytes);
                 ClientService.upload(message);

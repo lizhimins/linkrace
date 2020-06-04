@@ -40,7 +40,7 @@ public class ClientService extends Thread {
 
     private static final Logger log = LoggerFactory.getLogger(ClientService.class);
 
-    protected static final int nThreads = 2;
+    protected static final int nThreads = 4;
     protected static List<ClientService> services;
 
     // 通信相关参数配置
@@ -58,9 +58,6 @@ public class ClientService extends Thread {
 
     // 数据获取地址, 由 CommonController 传入
     private static String path;
-
-    // 精确一次上传
-    public static ConcurrentHashMap<String, AtomicBoolean> waitArea = new ConcurrentHashMap<>();
 
     // 真实数据
     private static final byte LOG_SEPARATOR = (byte) '|';
@@ -262,7 +259,7 @@ public class ClientService extends Thread {
         queryCount.incrementAndGet();
         int bucketIndex = StringUtil.byteToHex(traceId, 0, 5);
         // log.info("query: " + new String(traceId));
-        buckets[bucketIndex].tryResponse();
+        buckets[bucketIndex].tryResponse(traceId.toString());
     }
 
     // 上传调用链
@@ -429,54 +426,6 @@ public class ClientService extends Thread {
         }
         // log.info(new String(result, 0, pos));
         return new String(result, 0, pos).getBytes();
-
-//        Message message = new Message(MessageType.UPLOAD.getValue(), );
-//        upload(message);
-
-//        client.newCall(request).enqueue(new Callback() {
-//            @Override
-//            public void onFailure(Call call, IOException e) {
-//                //失败回调
-//            }
-//
-//            @Override
-//            public void onResponse(Call call, Response response) throws IOException {
-//                //成功回调，当前线程为子线程，如果需要更新UI，需要post到主线程中
-//                boolean successful = response.isSuccessful();
-//                //响应消息头
-//                Headers headers = response.headers();
-//                //响应消息体
-//                ResponseBody body = response.body();
-//                String content = response.body().string();
-//                String[] split = content.split("\n");
-//                for (int i = 0; i < split.length; i++) {
-//                    String line = split[i];
-//                    if (line.length() == 0 || line.startsWith("\r") || line.startsWith("-") || line.startsWith("C")) {
-//                        continue;
-//                    }
-//                    // System.out.println(line);
-//                }
-//                // System.out.println(content);
-//                //缓存控制
-//                CacheControl cacheControl = response.cacheControl();
-//            }
-//        });
-
-
-//        HttpURLConnection httpConnection = (HttpURLConnection) url.openConnection(Proxy.NO_PROXY);
-//        httpConnection.setRequestProperty("range", requestOffset);
-//        InputStream input = httpConnection.getInputStream();
-//        BufferedReader bf = new BufferedReader(new InputStreamReader(input));
-//        String line;
-//
-//        while ((line = bf.readLine()) != null) {
-//            if (line.length() == 0 || line.startsWith("\r") || line.startsWith("-") || line.startsWith("C")) {
-//                continue;
-//            }
-//            // log.info(line);
-//        }
-//        bf.close();
-//        input.close();
     }
 
     @Override
