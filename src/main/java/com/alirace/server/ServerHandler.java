@@ -61,17 +61,16 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
             }
 
             // 如果当前内存中不包含 traceId 的调用链路就放入内存, 如果存在的话就合并调用链, 然后刷盘
-            ByteBuf byteBuf = mergeMap.putIfAbsent(traceId.toString(), Unpooled.buffer(1024));
-            if (byteBuf != null) {
-                byteBuf.writeBytes(message.getBody());
-                ServerService.flushResult(traceId.toString(), byteBuf);
+            byte[] result = mergeMap.putIfAbsent(traceId.toString(), body);
+            if (result != null) {
+                ServerService.flushResult(traceId.toString(), body, result);
             }
             return;
         }
 
         if (MessageType.RESPONSE.getValue() == message.getType()) {
             queryResponseCount.incrementAndGet();
-//            // 反序列化得到数据
+            // 反序列化得到数据
 //            Record record = SerializeUtil.deserialize(message.getBody(), Record.class);
 //            String traceId = record.getTraceId();
 //            // log.info(traceId);

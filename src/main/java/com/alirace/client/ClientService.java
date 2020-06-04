@@ -40,7 +40,7 @@ public class ClientService extends Thread {
 
     private static final Logger log = LoggerFactory.getLogger(ClientService.class);
 
-    protected static final int nThreads = 1;
+    protected static final int nThreads = 2;
     protected static List<ClientService> services;
 
     // 通信相关参数配置
@@ -438,7 +438,7 @@ public class ClientService extends Thread {
         }
         // log.info(new String(result, 0, pos));
 
-        Message message = new Message(MessageType.UPLOAD.getValue(), new String(result, 0, pos).toString().getBytes());
+        Message message = new Message(MessageType.UPLOAD.getValue(), new String(result, 0, pos).getBytes());
         upload(message);
 
 //        client.newCall(request).enqueue(new Callback() {
