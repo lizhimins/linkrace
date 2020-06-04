@@ -14,6 +14,7 @@ public class Bucket {
 
     // 保存有没有错误
     private boolean isError = false;
+    private boolean isDone = false;
 
     private int index = 0;
 
@@ -21,6 +22,10 @@ public class Bucket {
     private long[] end = new long[64];
 
     public Bucket() {
+        for (int i = 0; i < 64; i++) {
+            start[i] = 0L;
+            end[i] = 0L;
+        }
     }
 
     public byte[] getTraceId() {
@@ -30,6 +35,7 @@ public class Bucket {
     public void init() {
         index = 0;
         isError = false;
+        isDone = false;
     }
 
     // 硬拷贝 traceId, 逻辑删除偏移量
@@ -38,6 +44,14 @@ public class Bucket {
             this.traceId[i] = traceId[i];
         }
         init();
+    }
+
+    public boolean isDone() {
+        return isDone;
+    }
+
+    public void setDone(boolean done) {
+        isDone = done;
     }
 
     public boolean isError() {
@@ -77,10 +91,29 @@ public class Bucket {
         return sb.substring(0, sb.lastIndexOf(","));
     }
 
-    public void checkAndUpload(long preBucketOffset) throws IOException {
-        if (isError && start[index] != preBucketOffset) {
-            ClientService.query(getQueryString());
-            init();
+    public void upload() throws IOException {
+        if (isDone) {
+            System.out.println("isDone1");
+            Message message = new Message(MessageType.RESPONSE.getValue(), "1".getBytes());
+            ClientService.response(message);
+        }
+//        byte[] bytes = ClientService.query(getQueryString());
+//        Message message = new Message(MessageType.RESPONSE.getValue(), bytes);
+//        ClientService.upload(message);
+//        init();
+    }
+
+    public void checkAndUpload(long endOffset) throws IOException {
+        // System.out.println(endOffset + " " + end[index - 1]);
+        if (end[index - 1] == endOffset) {
+            // System.out.print("DONE ");
+            isDone = true;
+            if (isError) {
+                byte[] bytes = ClientService.query(getQueryString());
+                Message message = new Message(MessageType.UPLOAD.getValue(), bytes);
+                ClientService.upload(message);
+                init();
+            }
         }
     }
 }

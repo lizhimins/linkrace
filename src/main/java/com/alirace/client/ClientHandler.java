@@ -30,8 +30,7 @@ public class ClientHandler extends SimpleChannelInboundHandler<Object> {
             // String traceId = new String(message.getBody());
             // 调用查询服务上传查询结果
             // ClientService.queryRecord(traceId);
-            String traceId = new String(message.getBody());
-            ClientService.queryRecord(traceId);
+            ClientService.queryRecord(message.getBody());
             return;
         }
 

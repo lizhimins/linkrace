@@ -40,7 +40,7 @@ public class ClientService extends Thread {
 
     private static final Logger log = LoggerFactory.getLogger(ClientService.class);
 
-    protected static final int nThreads = 2;
+    protected static final int nThreads = 1;
     protected static List<ClientService> services;
 
     // 通信相关参数配置
@@ -89,7 +89,7 @@ public class ClientService extends Thread {
     // 窗口大小配置为 2万
     private int nodeIndex;
     private static final int WINDOW_SIZE = 20000;
-    private static Node[] nodes = new Node[WINDOW_SIZE];
+    private Node[] nodes = new Node[WINDOW_SIZE];
 
     // 保存 traceId
     private int pos = 0;
@@ -221,14 +221,15 @@ public class ClientService extends Thread {
 
                 // 窗口操作, 当前写 nodeIndex
                 // 取出2w记录之前的数据
-                int preBucketIndex = nodes[nodeIndex].bucketIndex;
+                int pre = nodes[nodeIndex].bucketIndex;
                 // 如果已经有数据了
-                if (preBucketIndex != -1) {
-                    buckets[preBucketIndex].checkAndUpload(nodes[nodeIndex].startOffset);
+                if (pre != -1) {
+                    buckets[pre].checkAndUpload(nodes[nodeIndex].endOffset);
                 }
                 // 覆盖写
+                // System.out.print(String.format("Node:%d Pre:%d  ", nodeIndex, pre));
                 nodes[nodeIndex].bucketIndex = bucketIndex;
-                nodes[nodeIndex].startOffset = preOffset;
+                nodes[nodeIndex].endOffset = truthOffset + nowOffset - LENGTH_PER_READ;
                 nodeIndex = (nodeIndex + 1) % WINDOW_SIZE;
 
                 nowOffset++;
@@ -250,28 +251,18 @@ public class ClientService extends Thread {
         for (int i = nodeIndex; i < nodeIndex + WINDOW_SIZE; i++) {
             int index = i % 20000;
             int preBucketIndex = nodes[index].bucketIndex;
-            buckets[preBucketIndex].checkAndUpload(nodes[index].startOffset);
+            buckets[preBucketIndex].checkAndUpload(nodes[index].endOffset);
         }
         log.info("Client pull data finish...");
         log.info("errorCount: " + errorCount);
     }
 
     // 查询
-    public static void queryRecord(String traceId) throws InterruptedException, IOException {
+    public static void queryRecord(byte[] traceId) throws InterruptedException, IOException {
         queryCount.incrementAndGet();
-        // TODO:
-        // log.info(traceId);
-
-        // TODO: 获得 OFFSET
-        String requestOffset = "0-30";
-        Request request = new Request.Builder()
-                .url(url)
-                .header("range", requestOffset)
-                .build();
-        // Response response = client.newCall(request).execute();
-
-        Message message = new Message(MessageType.RESPONSE.getValue(), "0123456789abcdef".getBytes());
-        response(message);
+        int bucketIndex = StringUtil.byteToHex(traceId, 0, 5);
+        log.info("query: " + new String(traceId));
+        buckets[bucketIndex].upload();
     }
 
     // 上传调用链
@@ -402,7 +393,7 @@ public class ClientService extends Thread {
 
     private static OkHttpClient client;
 
-    public static void query(String requestOffset) throws IOException {
+    public static byte[] query(String requestOffset) throws IOException {
         // log.info(requestOffset);
         Request request = new Request.Builder()
                 .url(url)
@@ -437,9 +428,10 @@ public class ClientService extends Thread {
             }
         }
         // log.info(new String(result, 0, pos));
+        return new String(result, 0, pos).getBytes();
 
-        Message message = new Message(MessageType.UPLOAD.getValue(), new String(result, 0, pos).getBytes());
-        upload(message);
+//        Message message = new Message(MessageType.UPLOAD.getValue(), );
+//        upload(message);
 
 //        client.newCall(request).enqueue(new Callback() {
 //            @Override

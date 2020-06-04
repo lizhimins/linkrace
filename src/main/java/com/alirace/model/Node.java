@@ -5,7 +5,7 @@ package com.alirace.model;
  */
 public class Node {
     public int bucketIndex = -1;
-    public long startOffset = -1;
+    public long endOffset = -1;
 
     public Node() {
     }
@@ -18,11 +18,11 @@ public class Node {
         this.bucketIndex = bucketIndex;
     }
 
-    public long getStartOffset() {
-        return startOffset;
+    public long getEndOffset() {
+        return endOffset;
     }
 
-    public void setStartOffset(long startOffset) {
-        this.startOffset = startOffset;
+    public void setEndOffset(long endOffset) {
+        this.endOffset = endOffset;
     }
 }
