@@ -1,6 +1,7 @@
 package com.alirace.model;
 
 import com.alirace.client.ClientService;
+import com.alirace.util.StringUtil;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.buffer.UnpooledByteBufAllocator;
@@ -15,11 +16,12 @@ import java.nio.charset.StandardCharsets;
  * 前缀树容器类
  */
 public class Bucket {
-
+    private int from = 0;
     private byte[] traceId = new byte[18];
 
     // 保存有没有错误
     private boolean isError = false;
+    private boolean isNeedUp = false;
     private boolean isDone = false;
 
     private int index = -1;
@@ -32,6 +34,13 @@ public class Bucket {
             start[i] = 0;
             end[i] = 0;
         }
+    }
+
+    public void init() {
+        index = -1;
+        isError = false;
+        isNeedUp = false;
+        isDone = false;
     }
 
     public byte[] getTraceId() {
@@ -60,12 +69,6 @@ public class Bucket {
             sb.append((char) (int) traceId[i]);
         }
         return sb.toString();
-    }
-
-    public void init() {
-        index = -1;
-        isError = false;
-        isDone = false;
     }
 
     public boolean isDone() {
@@ -114,28 +117,33 @@ public class Bucket {
     }
 
     public void tryResponse(String traceId) throws IOException {
-        // 尝试放进去
-        if (this.isError) {
-            Message message = new Message(MessageType.RESPONSE.getValue(), "1".getBytes());
-            ClientService.upload(message);
-        } else {
-            if (isDone) {
-                byte[] bytes = ClientService.query(getQueryString());
-                Message message = new Message(MessageType.RESPONSE.getValue(), bytes);
-                ClientService.response(message);
-                init();
-            } else {
-                this.isError = true;
+        if (isDone) {
+            byte[] bytes = ClientService.services.get(from).bytes;
+            // 本地内存查, 速度快
+            int length = 0;
+            for (int i = 0; i <= index; i++) {
+                length += end[i] - start[i] + 1;
             }
+
+            ByteBuf buffer = Unpooled.buffer(length);
+            for (int i = 0; i <= index; i++) {
+                buffer.writeBytes(bytes, start[i], end[i] - start[i] + 1);
+            }
+            // System.out.println(new String(buffer.array(), StandardCharsets.UTF_8));
+            // 上传数据
+            ClientService.response(buffer.array());
+            init();
+            buffer.release();
+        } else {
+            this.isError = true;
         }
-        // ClientService.response(message);
     }
 
     public void checkAndUpload(byte[] bytes, long endOffset) throws IOException {
         if (index != -1 && end[index] == endOffset) {
             // System.out.print("DONE ");
             isDone = true;
-            if (isError) {
+            if (isError || isNeedUp) {
                 // RPC 查询, 速度降低10倍
 //                byte[] bytes = ClientService.query(getQueryString());
 //                Message message = new Message(MessageType.UPLOAD.getValue(), bytes);
@@ -154,9 +162,23 @@ public class Bucket {
                     buffer.writeBytes(bytes, start[i], end[i] - start[i] + 1);
                 }
                 // System.out.println(new String(buffer.array(), StandardCharsets.UTF_8));
+                if (isError) {
+                    // 上传数据
+                    ClientService.upload(buffer.array());
+                } else {
+                    ClientService.response(buffer.array());
+                }
                 buffer.release();
                 init();
             }
         }
+    }
+
+    public int getFrom() {
+        return from;
+    }
+
+    public void setFrom(int from) {
+        this.from = from;
     }
 }

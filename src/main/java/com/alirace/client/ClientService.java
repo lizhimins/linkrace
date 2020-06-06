@@ -38,7 +38,7 @@ public class ClientService extends Thread {
     private static final Logger log = LoggerFactory.getLogger(ClientService.class);
 
     protected static final int nThreads = 2;
-    protected static List<ClientService> services;
+    public static List<ClientService> services;
 
     // 通信相关参数配置
     private static final String HOST = "localhost";
@@ -67,6 +67,7 @@ public class ClientService extends Thread {
     // 控制偏移量
     protected long startOffset = -1L;
     protected long finishOffset = -1L;
+    public int threadId = -1;
     protected static volatile long contentLength = 0L;
     private int preOffset = 0; // 起始偏移
     private int nowOffset = 0; // 当前偏移
@@ -74,7 +75,7 @@ public class ClientService extends Thread {
     private long truthOffset = 0L; // 真实偏移
 
     private static final int BYTES_LENGTH = 256 * 1024 * 1024;
-    private byte[] bytes = new byte[BYTES_LENGTH + 2 * LENGTH_PER_READ];
+    public byte[] bytes = new byte[BYTES_LENGTH + 2 * LENGTH_PER_READ];
 
     // 索引部分
     private static final int BUCKETS_NUM = 0x01 << 20; // 100万
@@ -171,6 +172,7 @@ public class ClientService extends Thread {
 
                 if (!isSame) {
                     buckets[bucketIndex].setTraceId(traceId);
+                    buckets[bucketIndex].setFrom(threadId);
                 }
 
                 // 处理时间戳, spanId
@@ -266,14 +268,16 @@ public class ClientService extends Thread {
     }
 
     // 上传调用链
-    public static void upload(Message message) {
+    public static void upload(byte[] bytes) {
         uploadCount.incrementAndGet();
+        Message message = new Message(MessageType.UPLOAD.getValue(), bytes);
         future.channel().writeAndFlush(message);
     }
 
     // 查询响应
-    public static void response(Message message) {
+    public static void response(byte[] bytes) {
         responseCount.incrementAndGet();
+        Message message = new Message(MessageType.RESPONSE.getValue(), bytes);
         future.channel().writeAndFlush(message);
     }
 
@@ -283,6 +287,7 @@ public class ClientService extends Thread {
         long blockSize = length / nThreads;
         for (int i = 0; i < nThreads; i++) {
             ClientService service = services.get(i);
+            service.threadId = i;
             service.startOffset = i * blockSize;
             service.finishOffset = (i + 1) * blockSize - 1;
             if (i == nThreads - 1) {

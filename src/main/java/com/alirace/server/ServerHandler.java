@@ -70,17 +70,18 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
 
         if (MessageType.RESPONSE.getValue() == message.getType()) {
             queryResponseCount.incrementAndGet();
-            // 反序列化得到数据
-//            Record record = SerializeUtil.deserialize(message.getBody(), Record.class);
-//            String traceId = record.getTraceId();
-//            // log.info(traceId);
-//            Record result = mergeMap.get(traceId);
-//            if (result == null) {
-//                mergeMap.put(traceId, record);
-//            } else {
-//                result.merge(record);
-//                ServerService.flushResult(traceId, result);
-//            }
+            byte[] body = message.getBody();
+            StringBuffer traceId = new StringBuffer(20);
+            for (int i = 0; i < 20; i++) {
+                if (body[i] == (byte) '|') {
+                    break;
+                }
+                traceId.append((char) (int) body[i]);
+            }
+            byte[] result = mergeMap.get(traceId.toString());
+            if (result != null) {
+                ServerService.flushResult(traceId.toString(), body, result);
+            }
         }
 
 //        // 如果日志流已经上报完, 只等数据回查的话
