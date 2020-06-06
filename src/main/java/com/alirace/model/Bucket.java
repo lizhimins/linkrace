@@ -1,10 +1,14 @@
 package com.alirace.model;
 
-import com.alirace.client.ClientMonitor;
 import com.alirace.client.ClientService;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.buffer.UnpooledByteBufAllocator;
+import io.netty.buffer.UnpooledHeapByteBuf;
 
 import java.io.IOException;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 
 
 /**
@@ -20,18 +24,31 @@ public class Bucket {
 
     private int index = -1;
 
-    private long[] start = new long[64];
-    private long[] end = new long[64];
+    private int[] start = new int[64];
+    private int[] end = new int[64];
 
     public Bucket() {
         for (int i = 0; i < 64; i++) {
-            start[i] = 0L;
-            end[i] = 0L;
+            start[i] = 0;
+            end[i] = 0;
         }
     }
 
     public byte[] getTraceId() {
         return traceId;
+    }
+
+    // 硬拷贝 traceId, 逻辑删除偏移量
+    public void setTraceId(byte[] traceId) {
+        int i;
+        for (i = 0; i < traceId.length; i++) {
+            if (traceId[i] == (byte) (int) '\n') {
+                break;
+            }
+            this.traceId[i] = traceId[i];
+        }
+        this.traceId[i] = (byte) (int) '\n';
+        index = -1;
     }
 
     public String getTraceIdString() {
@@ -49,19 +66,6 @@ public class Bucket {
         index = -1;
         isError = false;
         isDone = false;
-    }
-
-    // 硬拷贝 traceId, 逻辑删除偏移量
-    public void setTraceId(byte[] traceId) {
-        int i;
-        for (i = 0; i < traceId.length; i++) {
-            if (traceId[i] == (byte) (int) '\n') {
-                break;
-            }
-            this.traceId[i] = traceId[i];
-        }
-        this.traceId[i] = (byte) (int) '\n';
-        init();
     }
 
     public boolean isDone() {
@@ -90,7 +94,7 @@ public class Bucket {
         return true;
     }
 
-    public void addNewSpan(long startOff, long endOff, boolean isError) {
+    public void addNewSpan(int startOff, int endOff, boolean isError) {
         index++;
         this.isError |= isError;
         this.start[index] = startOff;
@@ -112,14 +116,13 @@ public class Bucket {
     public void tryResponse(String traceId) throws IOException {
         // 尝试放进去
         if (this.isError) {
-
             Message message = new Message(MessageType.RESPONSE.getValue(), "1".getBytes());
             ClientService.upload(message);
         } else {
             if (isDone) {
                 byte[] bytes = ClientService.query(getQueryString());
                 Message message = new Message(MessageType.RESPONSE.getValue(), bytes);
-                ClientService.upload(message);
+                ClientService.response(message);
                 init();
             } else {
                 this.isError = true;
@@ -128,14 +131,30 @@ public class Bucket {
         // ClientService.response(message);
     }
 
-    public void checkAndUpload(long endOffset) throws IOException {
+    public void checkAndUpload(byte[] bytes, long endOffset) throws IOException {
         if (index != -1 && end[index] == endOffset) {
             // System.out.print("DONE ");
             isDone = true;
             if (isError) {
-                byte[] bytes = ClientService.query(getQueryString());
-                Message message = new Message(MessageType.UPLOAD.getValue(), bytes);
-                ClientService.upload(message);
+                // RPC 查询, 速度降低10倍
+//                byte[] bytes = ClientService.query(getQueryString());
+//                Message message = new Message(MessageType.UPLOAD.getValue(), bytes);
+//                ClientService.upload(message);
+
+//                System.out.println(getQueryString());
+
+                // 本地内存查, 速度快
+                int length = 0;
+                for (int i = 0; i <= index; i++) {
+                    length += end[i] - start[i] + 1;
+                }
+
+                ByteBuf buffer = Unpooled.buffer(length);
+                for (int i = 0; i <= index; i++) {
+                    buffer.writeBytes(bytes, start[i], end[i] - start[i] + 1);
+                }
+                // System.out.println(new String(buffer.array(), StandardCharsets.UTF_8));
+                buffer.release();
                 init();
             }
         }

@@ -1,38 +1,35 @@
 package com.alirace.client;
 
-import com.alirace.controller.CommonController;
-import com.alirace.model.*;
+import com.alirace.model.Bucket;
+import com.alirace.model.Message;
+import com.alirace.model.MessageType;
+import com.alirace.model.Node;
 import com.alirace.netty.MyDecoder;
 import com.alirace.netty.MyEncoder;
 import com.alirace.util.AhoCorasickAutomation;
-import com.alirace.util.SerializeUtil;
 import com.alirace.util.StringUtil;
 import io.netty.bootstrap.Bootstrap;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http.HttpHeaderNames;
-import okhttp3.*;
-import okhttp3.internal.connection.StreamAllocation;
-import org.checkerframework.checker.units.qual.C;
+import okhttp3.ConnectionPool;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.web.bind.annotation.RequestHeader;
 
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.net.*;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import java.net.HttpURLConnection;
+import java.net.Proxy;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.alirace.client.ClientMonitor.*;
 
@@ -76,7 +73,7 @@ public class ClientService extends Thread {
     private int logOffset = 0; // 日志偏移
     private long truthOffset = 0L; // 真实偏移
 
-    private static final int BYTES_LENGTH = 8192 * 1024;
+    private static final int BYTES_LENGTH = 256 * 1024 * 1024;
     private byte[] bytes = new byte[BYTES_LENGTH + 2 * LENGTH_PER_READ];
 
     // 索引部分
@@ -93,6 +90,7 @@ public class ClientService extends Thread {
     private byte[] traceId = new byte[32];
     private int bucketIndex = 0;
 
+    // 构造函数
     public ClientService(String name) {
         super(name);
 
@@ -103,6 +101,7 @@ public class ClientService extends Thread {
         }
     }
 
+    // 获得数据
     public void pullData() throws IOException {
         log.info(String.format("Start receive file: %10d-%10d, Data path: %s", startOffset, finishOffset, path));
 
@@ -159,7 +158,7 @@ public class ClientService extends Thread {
                     pos++;
                     nowOffset++;
                 }
-                traceId[pos] = (byte) '\n';
+                traceId[pos] = LINE_SEPARATOR;
 
                 // System.out.print(StringUtil.byteToString(traceId) + " ");
 
@@ -174,8 +173,11 @@ public class ClientService extends Thread {
                     buckets[bucketIndex].setTraceId(traceId);
                 }
 
+                // 处理时间戳, spanId
+                nowOffset += 1 + 16 + 1 + 14;
+
                 // 滑过中间部分
-                for (int sep = 0; sep < 8; nowOffset++) {
+                for (int sep = 0; sep < 6; nowOffset++) {
                     if (bytes[nowOffset] == LOG_SEPARATOR) {
                         sep++;
                     }
@@ -206,14 +208,14 @@ public class ClientService extends Thread {
                     // System.out.println("No");
                     nowOffset = -nowOffset;
                     errorCount.incrementAndGet();
-                    long start = truthOffset + preOffset - LENGTH_PER_READ;
-                    long end = truthOffset + nowOffset - LENGTH_PER_READ;
-                    buckets[bucketIndex].addNewSpan(start, end, true);
+//                    long start = truthOffset + preOffset - LENGTH_PER_READ;
+//                    long end = truthOffset + nowOffset - LENGTH_PER_READ;
+                    buckets[bucketIndex].addNewSpan(preOffset, nowOffset, true);
                 } else {
                     // System.out.println("Yes");
-                    long start = truthOffset + preOffset - LENGTH_PER_READ;
-                    long end = truthOffset + nowOffset - LENGTH_PER_READ;
-                    buckets[bucketIndex].addNewSpan(start, end, false);
+//                    long start = truthOffset + preOffset - LENGTH_PER_READ;
+//                    long end = truthOffset + nowOffset - LENGTH_PER_READ;
+                    buckets[bucketIndex].addNewSpan(preOffset, nowOffset, false);
                 }
 
                 // 窗口操作, 当前写 nodeIndex
@@ -221,12 +223,13 @@ public class ClientService extends Thread {
                 int pre = nodes[nodeIndex].bucketIndex;
                 // 如果已经有数据了
                 if (pre != -1) {
-                    buckets[pre].checkAndUpload(nodes[nodeIndex].endOffset);
+                    buckets[pre].checkAndUpload(bytes, nodes[nodeIndex].endOffset);
                 }
                 // 覆盖写
                 // System.out.print(String.format("Node:%d Pre:%d  ", nodeIndex, pre));
                 nodes[nodeIndex].bucketIndex = bucketIndex;
-                nodes[nodeIndex].endOffset = truthOffset + nowOffset - LENGTH_PER_READ;
+                // nodes[nodeIndex].endOffset = truthOffset + nowOffset - LENGTH_PER_READ;
+                nodes[nodeIndex].endOffset = nowOffset;
                 nodeIndex = (nodeIndex + 1) % WINDOW_SIZE;
 
                 nowOffset++;
@@ -246,9 +249,9 @@ public class ClientService extends Thread {
         }
 
         for (int i = nodeIndex; i < nodeIndex + WINDOW_SIZE; i++) {
-            int index = i % 20000;
-            int preBucketIndex = nodes[index].bucketIndex;
-            buckets[preBucketIndex].checkAndUpload(nodes[index].endOffset);
+            int now = i % 20000;
+            int pre = nodes[now].bucketIndex;
+            buckets[pre].checkAndUpload(bytes, nodes[now].endOffset);
         }
         log.info("Client pull data finish...");
         log.info("errorCount: " + errorCount);
@@ -270,59 +273,8 @@ public class ClientService extends Thread {
 
     // 查询响应
     public static void response(Message message) {
-        // responseCount.incrementAndGet();
+        responseCount.incrementAndGet();
         future.channel().writeAndFlush(message);
-    }
-
-    // 读入完成
-    public static void finish() {
-        byte[] body = "finish".getBytes();
-        Message message = new Message(MessageType.FINISH.getValue(), body);
-        future.channel().writeAndFlush(message);
-    }
-
-    public static void startNetty() {
-        log.info("Client Netty doConnect...");
-        workerGroup = new NioEventLoopGroup();
-        bootstrap = new Bootstrap();
-        bootstrap.group(workerGroup)
-                .channel(NioSocketChannel.class)
-                .option(ChannelOption.SO_KEEPALIVE, true)
-                .handler(new ChannelInitializer<SocketChannel>() {
-                    @Override
-                    public void initChannel(SocketChannel ch) throws Exception {
-                        ch.pipeline().addLast("decoder", new MyDecoder());
-                        ch.pipeline().addLast("encoder", new MyEncoder());
-                        ch.pipeline().addLast(new ClientHandler());
-                    }
-                });
-        doConnect();
-        // workerGroup.shutdownGracefully();
-    }
-
-    // 连接到服务器
-    public static void doConnect() {
-        if (future != null && future.channel() != null && future.channel().isActive()) {
-            return;
-        }
-        future = bootstrap.connect(HOST, PORT);
-        future.addListener(new ChannelFutureListener() {
-            @Override
-            public void operationComplete(ChannelFuture future) throws Exception {
-                if (future.isSuccess()) {
-                    Channel channel = future.channel();
-                    log.info("Connect to server successfully!");
-                } else {
-                    // log.info("Failed to connect to server, try connect after 1s.");
-                    future.channel().eventLoop().schedule(new Runnable() {
-                        @Override
-                        public void run() {
-                            doConnect();
-                        }
-                    }, 1000, TimeUnit.MILLISECONDS);
-                }
-            }
-        });
     }
 
     public static void setOffsetAndRun(long length) {
@@ -436,5 +388,50 @@ public class ClientService extends Thread {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    // 启动 netty 进行通信服务
+    public static void startNetty() {
+        log.info("Client Netty doConnect...");
+        workerGroup = new NioEventLoopGroup();
+        bootstrap = new Bootstrap();
+        bootstrap.group(workerGroup)
+                .channel(NioSocketChannel.class)
+                .option(ChannelOption.SO_KEEPALIVE, true)
+                .handler(new ChannelInitializer<SocketChannel>() {
+                    @Override
+                    public void initChannel(SocketChannel ch) throws Exception {
+                        ch.pipeline().addLast("decoder", new MyDecoder());
+                        ch.pipeline().addLast("encoder", new MyEncoder());
+                        ch.pipeline().addLast(new ClientHandler());
+                    }
+                });
+        doConnect();
+        // workerGroup.shutdownGracefully();
+    }
+
+    // 连接到服务器
+    public static void doConnect() {
+        if (future != null && future.channel() != null && future.channel().isActive()) {
+            return;
+        }
+        future = bootstrap.connect(HOST, PORT);
+        future.addListener(new ChannelFutureListener() {
+            @Override
+            public void operationComplete(ChannelFuture future) throws Exception {
+                if (future.isSuccess()) {
+                    Channel channel = future.channel();
+                    log.info("Connect to server successfully!");
+                } else {
+                    // log.info("Failed to connect to server, try connect after 1s.");
+                    future.channel().eventLoop().schedule(new Runnable() {
+                        @Override
+                        public void run() {
+                            doConnect();
+                        }
+                    }, 1000, TimeUnit.MILLISECONDS);
+                }
+            }
+        });
     }
 }
