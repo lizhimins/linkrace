@@ -45,6 +45,6 @@ JAVA_OPT="${JAVA_OPT} -Djava.ext.dirs=${JAVA_HOME}/jre/lib/ext:${BASE_DIR}/lib"
 #JAVA_OPT="${JAVA_OPT} -Xdebug -Xrunjdwp:transport=dt_socket,address=9555,server=y,suspend=n"
 #JAVA_OPT="${JAVA_OPT} ${JAVA_OPT_EXT}"
 #JAVA_OPT="${JAVA_OPT} -jar ${CLASSPATH}"
-
 java ${JAVA_OPT} -jar LinkTracking-1.0.0.jar
+
 

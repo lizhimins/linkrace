@@ -206,7 +206,10 @@ public class ClientService extends Thread {
                 boolean flag = Tag.isError(sb.toString());
                 */
 
-                nowOffset = AhoCorasickAutomation.find(bytes, nowOffset - 1);
+                // nowOffset = AhoCorasickAutomation.find(bytes, nowOffset - 1);
+                while (bytes[nowOffset] != LINE_SEPARATOR) {
+                    nowOffset++;
+                }
 
                 /*
                 if (nowOffset < 0 && !flag || nowOffset > 0 && flag) {
@@ -326,7 +329,7 @@ public class ClientService extends Thread {
         poolConfig.setMaxTotal(BUCKETS_NUM);
         // 新建一个对象池,传入对象工厂和配置
         recordPool = new GenericObjectPool<>(factory, poolConfig);
-        for (int i = 0; i < BUCKETS_NUM; i++) {
+        for (int i = 0; i < 81_0000; i++) {
             recordPool.addObject();
         }
 

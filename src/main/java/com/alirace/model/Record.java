@@ -25,8 +25,8 @@ public class Record {
     private AtomicBoolean isUpload = new AtomicBoolean(false);
 
     private int index = -1;
-    private int[] start = new int[64];
-    private int[] end = new int[64];
+    private int[] start = new int[72];
+    private int[] end = new int[72];
 
     public void addNewSpan(int startOff, int endOff, boolean isError) {
         index++;
