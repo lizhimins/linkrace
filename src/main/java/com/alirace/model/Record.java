@@ -3,110 +3,113 @@ package com.alirace.model;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
+import java.io.IOException;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.LinkedList;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class Record {
 
-    // traceId, 用来标记整个链路
-    public String traceId;
+    // 保存 traceId 的 hashCode
+    private int hashCode;
 
-    public int left = 0, right = 0;
-    public boolean isExist = true;
+    // 保存有没有错误
+    private boolean isError = false;
 
-    // 懒判断策略, 是否包含错误, 默认为不包含错误, 如果一个调用已经发生错误不需要再次检查
-    public boolean isError = false;
+    // 调用是否终结
+    private boolean isDone = false;
 
-    public LinkedList<String> list;
+    // 有没有上传过
+    private AtomicBoolean isUpload = new AtomicBoolean(false);
 
-    public Record(String traceId) {
-        this.traceId = traceId;
+    private int index = -1;
+    private int[] start = new int[64];
+    private int[] end = new int[64];
+
+    public void addNewSpan(int startOff, int endOff, boolean isError) {
+        index++;
+        this.isError |= isError;
+        this.start[index] = startOff;
+        this.end[index] = endOff;
     }
 
-    public void addTraceLog(String traceLog) {
-        if (traceLog == null || traceLog.length() < 16) {
-            return;
+    public String getQueryString() {
+        StringBuffer sb = new StringBuffer();
+        sb.append("bytes=");
+        for (int i = 0; i <= index; i++) {
+            sb.append(start[i]);
+            sb.append("-");
+            sb.append(end[i]);
+            sb.append(",");
         }
-
-        if (list == null) {
-            list = new LinkedList<>();
-        }
-        list.add(traceLog);
+        return sb.substring(0, sb.lastIndexOf(","));
     }
 
-    // 合并日志
-    public void merge(Record other) {
-        if (other == null || other.list == null || other.list.size() == 0) {
-            return;
-        }
-        list.addAll(other.list);
-        Collections.sort(list, new Comparator<String>() {
-            @Override
-            public int compare(String o1, String o2) {
-                return (int) (TraceLog.getTime(o1) - TraceLog.getTime(o2));
-            }
-        });
+    public void tryResponse(String traceId) throws IOException {
+//        if (isDone) {
+//            byte[] bytes = ClientService.services.get(from).bytes;
+//            // 本地内存查, 速度快
+//            int length = 0;
+//            for (int i = 0; i <= index; i++) {
+//                length += end[i] - start[i] + 1;
+//            }
+//
+//            ByteBuf buffer = Unpooled.buffer(length);
+//            for (int i = 0; i <= index; i++) {
+//                buffer.writeBytes(bytes, start[i], end[i] - start[i] + 1);
+//            }
+//            // System.out.println(new String(buffer.array(), StandardCharsets.UTF_8));
+//            // 上传数据
+//            ClientService.response(buffer.array());
+//            init();
+//            buffer.release();
+//        } else {
+//            this.isError = true;
+//        }
     }
 
-    public byte[] cmpAndMerge() {
-        Collections.sort(list, new Comparator<String>() {
-            @Override
-            public int compare(String o1, String o2) {
-                return (int) (TraceLog.getTime(o1) - TraceLog.getTime(o2));
-            }
-        });
-        ByteBuf byteBuf = Unpooled.buffer(4096);
-        Iterator<String> iterator = list.iterator();
-        while (iterator.hasNext()) {
-            String value = iterator.next();
-            byteBuf.writeBytes(value.getBytes());
-            byteBuf.writeByte((byte) (int) '\n');
-            System.out.println(value);
-        }
-        return byteBuf.array();
+    public void checkAndUpload(long endOffset) throws IOException {
+//        if (index != -1 && end[index] == endOffset) {
+//            // System.out.print("DONE ");
+//            isDone = true;
+//            if (isError || isNeedUp) {
+//                // RPC 查询, 速度降低10倍
+////                byte[] bytes = ClientService.query(getQueryString());
+////                Message message = new Message(MessageType.UPLOAD.getValue(), bytes);
+////                ClientService.upload(message);
+//
+////                System.out.println(getQueryString());
+//
+//                // 本地内存查, 速度快
+//                int length = 0;
+//                for (int i = 0; i <= index; i++) {
+//                    length += end[i] - start[i] + 1;
+//                }
+//
+//                ByteBuf buffer = Unpooled.buffer(length);
+//                for (int i = 0; i <= index; i++) {
+//                    buffer.writeBytes(bytes, start[i], end[i] - start[i] + 1);
+//                }
+//                // System.out.println(new String(buffer.array(), StandardCharsets.UTF_8));
+//                if (isError) {
+//                    // 上传数据
+//                    // ClientService.upload(buffer.array());
+//                } else {
+//                    // ClientService.response(buffer.array());
+//                }
+//                buffer.release();
+//            }
+//        }
     }
 
-    @Override
-    public String toString() {
-        return "Record{" +
-                "traceId='" + traceId + '\'' +
-                ", isError=" + isError +
-                ", list=" + list +
-                '}';
+    public int getHashCode() {
+        return hashCode;
     }
 
-    public String getTraceId() {
-        return traceId;
-    }
-
-    public void setTraceId(String traceId) {
-        this.traceId = traceId;
-    }
-
-    public int getLeft() {
-        return left;
-    }
-
-    public void setLeft(int left) {
-        this.left = left;
-    }
-
-    public int getRight() {
-        return right;
-    }
-
-    public void setRight(int right) {
-        this.right = right;
-    }
-
-    public boolean isExist() {
-        return isExist;
-    }
-
-    public void setExist(boolean exist) {
-        isExist = exist;
+    public void setHashCode(int hashCode) {
+        this.hashCode = hashCode;
     }
 
     public boolean isError() {
@@ -117,11 +120,19 @@ public class Record {
         isError = error;
     }
 
-    public LinkedList<String> getList() {
-        return list;
+    public boolean isDone() {
+        return isDone;
     }
 
-    public void setList(LinkedList<String> list) {
-        this.list = list;
+    public void setDone(boolean done) {
+        isDone = done;
+    }
+
+    public AtomicBoolean getIsUpload() {
+        return isUpload;
+    }
+
+    public void setIsUpload(AtomicBoolean isUpload) {
+        this.isUpload = isUpload;
     }
 }
