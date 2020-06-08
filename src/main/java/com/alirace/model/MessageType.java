@@ -7,6 +7,7 @@ public enum MessageType {
 
     // 客户端->服务端
     UPLOAD((byte) 0x00), // 主动上传
+    PASS((byte) 0x01), // 数据正确
     RESPONSE((byte) 0x09), // 查询响应
     FINISH((byte) 0x0F),
 

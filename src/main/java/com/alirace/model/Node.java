@@ -4,25 +4,25 @@ package com.alirace.model;
  * -1 表示节点不存在
  */
 public class Node {
-    public int bucketIndex = -1;
-    public long endOffset = -1;
+    public Record record;
+    public int endOffset = -1;
 
     public Node() {
     }
 
-    public int getBucketIndex() {
-        return bucketIndex;
+    public Record getRecord() {
+        return record;
     }
 
-    public void setBucketIndex(int bucketIndex) {
-        this.bucketIndex = bucketIndex;
+    public void setRecord(Record record) {
+        this.record = record;
     }
 
-    public long getEndOffset() {
+    public int getEndOffset() {
         return endOffset;
     }
 
-    public void setEndOffset(long endOffset) {
+    public void setEndOffset(int endOffset) {
         this.endOffset = endOffset;
     }
 }

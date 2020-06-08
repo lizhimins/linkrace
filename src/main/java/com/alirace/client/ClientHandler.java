@@ -25,6 +25,11 @@ public class ClientHandler extends SimpleChannelInboundHandler<Object> {
         Channel channel = ctx.channel();
         Message message = (Message) obj;
 
+        if (MessageType.PASS.getValue() == message.getType()) {
+            // log.info(new String(message.getBody()));
+            ClientService.releaseRecord(message.getBody());
+        }
+
         // 如果收到查询请求
         if (MessageType.QUERY.getValue() == message.getType()) {
             // String traceId = new String(message.getBody());

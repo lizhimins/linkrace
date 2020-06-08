@@ -38,6 +38,16 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
         // log.info("Client->Server: " + channel.remoteAddress() + " " + message.toString());
 
         // 动态代理
+
+        if (MessageType.PASS.getValue() == message.getType()) {
+            // log.info(new String(message.getBody()));
+            for (Channel ch : group) {
+                if (ch != channel) {
+                    ch.writeAndFlush(message);
+                }
+            }
+        }
+
         // 如果是上传数据
         if (MessageType.UPLOAD.getValue() == message.getType()) {
             // 反序列化得到数据

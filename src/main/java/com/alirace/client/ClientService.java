@@ -25,15 +25,19 @@ import java.net.HttpURLConnection;
 import java.net.Proxy;
 import java.net.URL;
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import static com.alirace.client.ClientMonitor.*;
+import static com.alirace.client.HttpClient.queryFileLength;
+import static com.alirace.server.ServerService.startNetty;
 
 public class ClientService extends Thread {
 
     private static final Logger log = LoggerFactory.getLogger(ClientService.class);
 
-    protected static final int nThreads = 2;
+    protected static final int nThreads = 1;
     public static List<ClientService> services;
 
     // 通信相关参数配置
@@ -49,13 +53,17 @@ public class ClientService extends Thread {
     // 数据获取地址, 由 CommonController 传入
     private static String path;
 
-    // 真实数据
+    // 常量
     private static final byte LOG_SEPARATOR = (byte) '|';
     private static final byte CR_SEPARATOR = (byte) '\r';
     private static final byte MINUS_SEPARATOR = (byte) '-';
     private static final byte LINE_SEPARATOR = (byte) '\n';
     private static final byte C_SEPARATOR = (byte) 'C';
+    private static final byte[] HTTP_STATUS_CODE = "http.status_code=200".getBytes();
+    private static final byte[] ERROR_EQUAL_1 = "error=1".getBytes();
     private static final int LENGTH_PER_READ = 8192; // 每一次读 8kb
+
+    private static ExecutorService fixedThreadPool = Executors.newFixedThreadPool(2);
 
     // 控制偏移量
     protected long startOffset = -1L;
@@ -66,7 +74,7 @@ public class ClientService extends Thread {
     private int nowOffset = 0; // 当前偏移
     private int logOffset = 0; // 日志偏移
 
-    private static final int BYTES_LENGTH = 256 * 1024 * 1024;
+    private static final int BYTES_LENGTH = 512 * 1024 * 1024;
     public byte[] bytes = new byte[BYTES_LENGTH + 2 * LENGTH_PER_READ];
 
     // 索引部分
@@ -84,6 +92,7 @@ public class ClientService extends Thread {
     private int bucketIndex = 0;
     private int hash = 0;
     private boolean flag = false;
+    private byte b;
 
     // 构造函数
     public ClientService(String name) {
@@ -128,16 +137,47 @@ public class ClientService extends Thread {
         }
 
         // log.info(String.format("bucketIndex: %6d, hashCode: %6d", bucketIndex, hash));
-        return buckets[bucketIndex].getRecord(hash);
+        return buckets[bucketIndex].getRecord(threadId, hash);
+    }
+
+    // 获得 Record 的引用, 注意该方法会自动推进 nowOffset
+    public static void releaseRecord(byte[] traceId) throws Exception {
+        int i = 0;
+
+        // 根据前几位计算桶的编号
+        int bucketIndex = 0;
+        for (i = 0; i < 5; i++) {
+            int b = traceId[i];
+            if ('0' <= b && b <= '9') {
+                bucketIndex = bucketIndex * 16 + (b - '0');
+            } else {
+                bucketIndex = bucketIndex * 16 + (b - 'a') + 10;
+            }
+        }
+
+        int hash = 0;
+        for (i = 5; i < 14; ++i) {
+            hash += traceId[i];
+            hash += (hash << 10);
+            hash ^= (hash >> 6);
+        }
+        hash += (hash << 3);
+        hash ^= (hash >> 11);
+        hash += (hash << 15);
+
+
+        buckets[bucketIndex].releaseRecord(hash);
     }
 
     // BIO 读取数据
     public void pullData() throws Exception {
         HttpURLConnection httpConnection = (HttpURLConnection) url.openConnection(Proxy.NO_PROXY);
-        long start = startOffset != 0 ? startOffset - 50_0000 : startOffset;
-        long finish = finishOffset != contentLength ? finishOffset + 50_0000 : finishOffset;
-        log.info(String.format("Start receive file: %10d-%10d, Data path: %s", start, finish, path));
-        String range = String.format("bytes=%d-%d", start, finish);
+//        long start = startOffset != 0 ? startOffset - 3000_0000 : startOffset;
+//        long finish = finishOffset != contentLength ? finishOffset + 3000_0000 : finishOffset;
+//        long total = finish - start;
+//        long deal = 0;
+        log.info(String.format("Start receive file: %10d-%10d, Data path: %s", startOffset, finishOffset, path));
+        String range = String.format("bytes=%d-%d", startOffset, finishOffset);
         httpConnection.setRequestProperty("range", range);
         InputStream input = httpConnection.getInputStream();
 
@@ -162,86 +202,126 @@ public class ClientService extends Thread {
             // 日志坐标右移
             logOffset += readByteCount;
 
-            // 如果不是处理第一段数据的线程, 就会有半包问题, 这时候跳过最前面的半条日志
-            if (startOffset != 0) {
-                while (bytes[nowOffset] != LINE_SEPARATOR) {
-                    nowOffset++;
-                }
-                nowOffset++;
-            }
-
+//            // 如果不是处理第一段数据的线程, 就会有半包问题, 这时候跳过最前面的半条日志
+//            if (startOffset != 0) {
+//                while (bytes[nowOffset] != LINE_SEPARATOR) {
+//                    nowOffset++;
+//                }
+//                nowOffset++;
+//            }
+//
             // 循环处理所有数据
             while (nowOffset + LENGTH_PER_READ < logOffset) {
                 preOffset = nowOffset;
 
-                // 调试用延迟
-                // try {
-                //     TimeUnit.MILLISECONDS.sleep(1);
-                // } catch (InterruptedException e) {
-                //     e.printStackTrace();
-                // }
-
-                // traceId
-                Record record = getRecord();
-
+//                // 调试用延迟
+//                // try {
+//                //     TimeUnit.MILLISECONDS.sleep(1);
+//                // } catch (InterruptedException e) {
+//                //     e.printStackTrace();
+//                // }
+//
+//                // traceId
+//                Record record = getRecord();
+//
                 // 处理时间戳, spanId
                 nowOffset += 1 + 16 + 1 + 14;
-
-                // 滑过中间部分
-                for (int sep = 0; sep < 6; nowOffset++) {
-                    if (bytes[nowOffset] == LOG_SEPARATOR) {
-                        sep++;
-                    }
-                }
-
-                /*
-                // 对拍算法
-                StringBuffer sb = new StringBuffer();
-                for (int k = nowOffset; k < logOffset; k++) {
-                    if (LINE_SEPARATOR == bytes[k]) {
-                        break;
-                    }
-                    sb.append((char) bytes[k]);
-                }
-                boolean flag = Tag.isError(sb.toString());
-                */
-
-                // nowOffset = AhoCorasickAutomation.find(bytes, nowOffset - 1);
+//
+//                // 滑过中间部分
+//                for (int sep = 0; sep < 6; nowOffset++) {
+//                    if (bytes[nowOffset] == LOG_SEPARATOR) {
+//                        sep++;
+//                    }
+//                }
+//
+//                /*
+//                // 对拍算法
+//                StringBuffer sb = new StringBuffer();
+//                for (int k = nowOffset; k < logOffset; k++) {
+//                    if (LINE_SEPARATOR == bytes[k]) {
+//                        break;
+//                    }
+//                    sb.append((char) bytes[k]);
+//                }
+//                boolean flag = Tag.isError(sb.toString());
+//                */
+//
+//                // nowOffset = AhoCorasickAutomation.find(bytes, nowOffset - 1);
+//
+//                // 循环展开
+//                flag = false;
+//                while (bytes[nowOffset] != LINE_SEPARATOR) {
+//                    if (   bytes[nowOffset    ] == HTTP_STATUS_CODE[0]
+//                        && bytes[nowOffset + 1] == HTTP_STATUS_CODE[1]
+//                        && bytes[nowOffset + 2] == HTTP_STATUS_CODE[2]
+//                        && bytes[nowOffset + 3] == HTTP_STATUS_CODE[3]
+//                        && bytes[nowOffset + 4] == HTTP_STATUS_CODE[4]
+//                        && bytes[nowOffset + 5] == HTTP_STATUS_CODE[5]
+//                        && bytes[nowOffset + 6] == HTTP_STATUS_CODE[6]
+//                        && bytes[nowOffset + 7] == HTTP_STATUS_CODE[7]
+//                        && bytes[nowOffset + 8] == HTTP_STATUS_CODE[8]
+//                        && bytes[nowOffset + 9] == HTTP_STATUS_CODE[9]
+//                        && bytes[nowOffset + 10] == HTTP_STATUS_CODE[10]
+//                        && bytes[nowOffset + 11] == HTTP_STATUS_CODE[11]
+//                        && bytes[nowOffset + 12] == HTTP_STATUS_CODE[12]
+//                        && bytes[nowOffset + 13] == HTTP_STATUS_CODE[13]
+//                        && bytes[nowOffset + 14] == HTTP_STATUS_CODE[14]
+//                        && bytes[nowOffset + 15] == HTTP_STATUS_CODE[15]
+//                        && bytes[nowOffset + 16] == HTTP_STATUS_CODE[16]
+//                    ) {
+//                        if (!(bytes[nowOffset + 17] == HTTP_STATUS_CODE[17]
+//                        && bytes[nowOffset + 18] == HTTP_STATUS_CODE[18]
+//                        && bytes[nowOffset + 19] == HTTP_STATUS_CODE[19])
+//                        ) {
+//                            flag = true; break;
+//                        }
+//                    }
+//
+//                    if (   bytes[nowOffset    ] == ERROR_EQUAL_1[0]
+//                        && bytes[nowOffset + 1] == ERROR_EQUAL_1[1]
+//                        && bytes[nowOffset + 2] == ERROR_EQUAL_1[2]
+//                        && bytes[nowOffset + 3] == ERROR_EQUAL_1[3]
+//                        && bytes[nowOffset + 4] == ERROR_EQUAL_1[4]
+//                        && bytes[nowOffset + 5] == ERROR_EQUAL_1[5]
+//                        && bytes[nowOffset + 6] == ERROR_EQUAL_1[6] ) {
+//                        flag = true; break;
+//                    }
+//                    nowOffset++;
+//                }
+//
                 while (bytes[nowOffset] != LINE_SEPARATOR) {
                     nowOffset++;
                 }
+                nowOffset++;
+                // log.info(preOffset + "-" + nowOffset);
 
-                /*
-                if (nowOffset < 0 && !flag || nowOffset > 0 && flag) {
-                    System.out.println(StringUtil.byteToString(traceId) + " " + sb.toString());
-                }
-                 */
-
-                // 返回值 < 0, 说明当前 traceId 有问题
-                if (nowOffset < 0) {
-                    flag = false;
-                    nowOffset = -nowOffset;
-                    errorCount.incrementAndGet();
-                } else {
-                    flag = true;
-                }
-                record.addNewSpan(preOffset, nowOffset, flag);
-
-                // 窗口操作, 当前写 nodeIndex
-                // 取出2w记录之前的数据
-//                int pre = nodes[nodeIndex].bucketIndex;
+                fixedThreadPool.execute(new Runnable() {
+                    @Override
+                    public void run() {
+                        System.out.println(preOffset + " " + nowOffset);
+                    }
+                });
+//
+//                if (flag) {
+//                    errorCount.incrementAndGet();
+//                }
+//
+//                record.addNewSpan(preOffset, nowOffset, flag);
+//
+//                // 窗口操作, 当前写 nodeIndex
+//                // 取出2w记录之前的数据
+//                Record pre = nodes[nodeIndex].record;
 //                // 如果已经有数据了
-//                if (pre != -1) {
-//                    buckets[pre].checkAndUpload(bytes, nodes[nodeIndex].endOffset);
+//                if (pre != null && nodes[nodeIndex].endOffset != -1) {
+//                    pre.checkAndUpload(nodes[nodeIndex].endOffset);
 //                }
 //                // 覆盖写
-//                // System.out.print(String.format("Node:%d Pre:%d  ", nodeIndex, pre));
-//                nodes[nodeIndex].bucketIndex = bucketIndex;
-//                // nodes[nodeIndex].endOffset = truthOffset + nowOffset - LENGTH_PER_READ;
+//                // System.print(String.format("Node:%d Pre:%d  ", nodeIndex, pre));
+//                nodes[nodeIndex].record = record;
 //                nodes[nodeIndex].endOffset = nowOffset;
 //                nodeIndex = (nodeIndex + 1) % WINDOW_SIZE;
-
-                nowOffset++;
+//
+//                nowOffset++;
             }
 
             // 如果太长了要从头开始写
@@ -262,7 +342,6 @@ public class ClientService extends Thread {
 //            buckets[pre].checkAndUpload(bytes, nodes[now].endOffset);
 //        }
         log.info("Client pull data finish...");
-        log.info("errorCount: " + errorCount);
     }
 
     // 查询
@@ -277,6 +356,13 @@ public class ClientService extends Thread {
     public static void upload(byte[] bytes) {
         uploadCount.incrementAndGet();
         Message message = new Message(MessageType.UPLOAD.getValue(), bytes);
+        future.channel().writeAndFlush(message);
+    }
+
+    // 正确同步
+    public static void pass(byte[] bytes) {
+        uploadCount.incrementAndGet();
+        Message message = new Message(MessageType.PASS.getValue(), bytes);
         future.channel().writeAndFlush(message);
     }
 
@@ -329,7 +415,7 @@ public class ClientService extends Thread {
         poolConfig.setMaxTotal(BUCKETS_NUM);
         // 新建一个对象池,传入对象工厂和配置
         recordPool = new GenericObjectPool<>(factory, poolConfig);
-        for (int i = 0; i < 81_0000; i++) {
+        for (int i = 0; i < 10_0000; i++) {
             recordPool.addObject();
         }
 
