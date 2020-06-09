@@ -68,20 +68,24 @@ public class ClientService extends Thread {
     private int nowOffset = 0; // 当前偏移
     private int logOffset = 0; // 日志偏移
 
-    private static final int BYTES_LENGTH = 512 * 1024 * 1024;
-    public byte[] bytes = new byte[BYTES_LENGTH + 2 * LENGTH_PER_READ];
+    private static final int BYTES_LENGTH = 256 * 1024 * 1024;
+    public byte[] bytes;
 
     // 找到对应的行号, 低 32 字节保存 hashcode, 高 32 字节保存行号
     private static final int BUCKETS_NUM = 0x01 << 20; // 100万
     private static final int TRACE_ID_HASH_CODE_AND_LINE_NUM = 16; // 每行32
     private static AtomicInteger lineIndex = new AtomicInteger(0);
     private static int[] bucketElements = new int[BUCKETS_NUM];
-    private static long[][] buckets = new long[BUCKETS_NUM][TRACE_ID_HASH_CODE_AND_LINE_NUM];
+    private static long[][] buckets = new long[BUCKETS_NUM][16];
+
+    // 行结构
+    private static long[][] offset = new long[BUCKETS_NUM][128];
 
     // 滑动窗口, 大小配置为 2万
     private static final int WINDOW_SIZE = 20000;
-    private int nodeIndex;
-    private long[] nodes = new long[WINDOW_SIZE];
+    private int windowIndex;
+    // private long[] nodes = new long[WINDOW_SIZE];
+    private long[] window = new long[WINDOW_SIZE];
 
     // 保存 traceId
     private int bucketIndex = 0;
@@ -89,15 +93,16 @@ public class ClientService extends Thread {
     private boolean flag = false;
     private byte b;
     private int sep;
+    private long tmp;
 
     // 构造函数
     public ClientService(String name) {
         super(name);
 
-        // 各自拥有一个窗口
-        log.info("Windows initializing start...");
+        bytes = new byte[BYTES_LENGTH + 2 * LENGTH_PER_READ];
+
         for (int i = 0; i < WINDOW_SIZE; i++) {
-            nodes[i] = 0L;
+            window[i] = -1L;
         }
     }
 
@@ -160,13 +165,13 @@ public class ClientService extends Thread {
             }
         }
 
-        int high = lineIndex.incrementAndGet();
+        int line = lineIndex.incrementAndGet();
         // log.info(String.format("bucketIndex: %6d, hashCode: %6d, ele: %6d", bucketIndex, hash, elements));
 
-        buckets[bucketIndex][elements] = (((long) high) << 32) + (long) hash;
+        buckets[bucketIndex][elements] = (((long) line) << 32) + (long) hash;
         bucketElements[bucketIndex]++;
 
-        return high;
+        return line;
     }
 
     // 获得 Record 的引用, 注意该方法会自动推进 nowOffset
@@ -245,7 +250,7 @@ public class ClientService extends Thread {
                 preOffset = nowOffset;
 
                 // traceId
-                queryLineIndex();
+                int lineId = queryLineIndex();
 
                 // long hashCode = StringUtil.byteToHex(bytes, nowOffset, nowOffset + 16);
                 // byteToHex();
@@ -339,37 +344,44 @@ public class ClientService extends Thread {
                 nowOffset++;
                 // log.info(preOffset + "-" + nowOffset);
 
+                tmp = (((long) preOffset) << 32) + (long) nowOffset;
+                // log.info(preOffset + "|" + nowOffset + "|" + tmp);
 
-//                final int start = preOffset;
-//                final int end = nowOffset;
-//                fixedThreadPool.execute(new Runnable() {
-//                    @Override
-//                    public void run() {
-//                        // System.out.println(start + " " + end);
-//
-//                    }
-//                });
-//
+                int pos = (int) offset[lineId][0];
+                offset[lineId][0]++;
+                offset[lineId][++pos] = tmp;
+
 //                if (flag) {
 //                    errorCount.incrementAndGet();
 //                }
 //
 //                record.addNewSpan(preOffset, nowOffset, flag);
 //
-//                // 窗口操作, 当前写 nodeIndex
-//                // 取出2w记录之前的数据
-//                Record pre = nodes[nodeIndex].record;
-//                // 如果已经有数据了
-//                if (pre != null && nodes[nodeIndex].endOffset != -1) {
-//                    pre.checkAndUpload(nodes[nodeIndex].endOffset);
-//                }
-//                // 覆盖写
-//                // System.print(String.format("Node:%d Pre:%d  ", nodeIndex, pre));
+                // 窗口操作, 当前写 nodeIndex
+                // 取出2w记录之前的数据
+                // 高位存行号 低位存最大偏移
+                long val = window[windowIndex];
+                // 如果已经有数据了
+                if (val != -1) {
+                    // pre.checkAndUpload(nodes[nodeIndex].endOffset);
+                    int high = (int) (val >> 32);
+                    int low = (int) val;
+                    int length = (int) buckets[high][0];
+//                    if (low == buckets[high][length]) {
+//                        System.out.println("jieshu");
+//                    } else {
+//                        System.out.println("meijieshu");
+//                    }
+
+                    // log.info(high + " " + low + " " + length + " " + buckets[high][length]);
+                }
+                // 覆盖写
+                // System.print(String.format("Node:%d Pre:%d  ", nodeIndex, pre));
 //                nodes[nodeIndex].record = record;
 //                nodes[nodeIndex].endOffset = nowOffset;
-//                nodeIndex = (nodeIndex + 1) % WINDOW_SIZE;
-//
-//                nowOffset++;
+                val = (((long) lineId) << 32) + (long) pos;
+                window[windowIndex] = val;
+                windowIndex = (windowIndex + 1) % WINDOW_SIZE;
             }
 
             // 如果太长了要从头开始写
@@ -390,6 +402,14 @@ public class ClientService extends Thread {
 //            buckets[pre].checkAndUpload(bytes, nodes[now].endOffset);
 //        }
         log.info("Client pull data finish...");
+
+
+        for (int i = 0; i < 20; i++) {
+            for (int j = 0; j < 20; j++) {
+                System.out.print(offset[i][j] + " ");
+            }
+            System.out.println();
+        }
     }
 
     // 查询
@@ -450,11 +470,11 @@ public class ClientService extends Thread {
             services.add(clientService);
         }
 
-        // 共享桶结构
-        log.info("Bucket initializing start...");
-        for (int i = 0; i < BUCKETS_NUM; i++) {
-            // buckets[i] = new Bucket();
-        }
+//        // 共享桶结构
+//        log.info("Bucket initializing start...");
+//        for (int i = 0; i < BUCKETS_NUM; i++) {
+//             buckets[i] = new Bucket();
+//        }
 //        log.info("Object pool initializing start...");
 //        RecordPoolFactory factory = new RecordPoolFactory();
 //        // 设置对象池的相关参数
