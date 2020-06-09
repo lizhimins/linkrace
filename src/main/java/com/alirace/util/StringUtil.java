@@ -21,14 +21,14 @@ public class StringUtil {
         return sb.toString();
     }
 
-    public static int byteToHex(byte[] bytes, int start, int end) {
-        int sum = 0;
+    public static long byteToHex(byte[] bytes, int start, int end) {
+        long sum = 0;
         for (int i = start; i < end; i++) {
             // System.out.println(bytes[i]);
             if ('0' <= bytes[i] && bytes[i] <= '9') {
-                sum = sum * 16 + ((int) bytes[i] - '0');
+                sum = sum << 4 + ((int) bytes[i] - '0');
             } else {
-                sum = sum * 16 + ((int) bytes[i] - 'a') + 10;
+                sum = sum << 4 + ((int) bytes[i] - 'a') + 10;
             }
         }
         return sum;

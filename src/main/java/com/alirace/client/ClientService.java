@@ -1,21 +1,15 @@
 package com.alirace.client;
 
-import com.alirace.model.*;
+import com.alirace.model.Message;
+import com.alirace.model.MessageType;
 import com.alirace.netty.MyDecoder;
 import com.alirace.netty.MyEncoder;
-import com.alirace.util.AhoCorasickAutomation;
-import com.alirace.util.StringUtil;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http.HttpHeaderNames;
-import okhttp3.ConnectionPool;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import org.apache.commons.pool2.impl.GenericObjectPool;
-import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,20 +18,19 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.Proxy;
 import java.net.URL;
-import java.util.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.alirace.client.ClientMonitor.*;
-import static com.alirace.client.HttpClient.queryFileLength;
-import static com.alirace.server.ServerService.startNetty;
 
 public class ClientService extends Thread {
 
     private static final Logger log = LoggerFactory.getLogger(ClientService.class);
 
-    protected static final int nThreads = 1;
+    protected static final int nThreads = 2;
     public static List<ClientService> services;
 
     // 通信相关参数配置
@@ -61,15 +54,16 @@ public class ClientService extends Thread {
     private static final byte C_SEPARATOR = (byte) 'C';
     private static final byte[] HTTP_STATUS_CODE = "http.status_code=200".getBytes();
     private static final byte[] ERROR_EQUAL_1 = "error=1".getBytes();
-    private static final int LENGTH_PER_READ = 8192; // 每一次读 8kb
+    private static final int LENGTH_PER_READ = 1024 * 1024; // 每一次读 1M 2.8秒
 
-    private static ExecutorService fixedThreadPool = Executors.newFixedThreadPool(2);
+    // 文件总长度
+    protected static volatile long contentLength = 0L;
 
     // 控制偏移量
     protected long startOffset = -1L;
     protected long finishOffset = -1L;
     public int threadId = -1;
-    protected static volatile long contentLength = 0L;
+
     private int preOffset = 0; // 起始偏移
     private int nowOffset = 0; // 当前偏移
     private int logOffset = 0; // 日志偏移
@@ -77,22 +71,24 @@ public class ClientService extends Thread {
     private static final int BYTES_LENGTH = 512 * 1024 * 1024;
     public byte[] bytes = new byte[BYTES_LENGTH + 2 * LENGTH_PER_READ];
 
-    // 索引部分
+    // 找到对应的行号, 低 32 字节保存 hashcode, 高 32 字节保存行号
     private static final int BUCKETS_NUM = 0x01 << 20; // 100万
-    private static Bucket[] buckets = new Bucket[BUCKETS_NUM];
-    // 对象池
-    public static GenericObjectPool<Record> recordPool;
+    private static final int TRACE_ID_HASH_CODE_AND_LINE_NUM = 16; // 每行32
+    private static AtomicInteger lineIndex = new AtomicInteger(0);
+    private static int[] bucketElements = new int[BUCKETS_NUM];
+    private static long[][] buckets = new long[BUCKETS_NUM][TRACE_ID_HASH_CODE_AND_LINE_NUM];
 
-    // 窗口大小配置为 2万
-    private int nodeIndex;
+    // 滑动窗口, 大小配置为 2万
     private static final int WINDOW_SIZE = 20000;
-    private Node[] nodes = new Node[WINDOW_SIZE];
+    private int nodeIndex;
+    private long[] nodes = new long[WINDOW_SIZE];
 
     // 保存 traceId
     private int bucketIndex = 0;
     private int hash = 0;
     private boolean flag = false;
     private byte b;
+    private int sep;
 
     // 构造函数
     public ClientService(String name) {
@@ -101,43 +97,76 @@ public class ClientService extends Thread {
         // 各自拥有一个窗口
         log.info("Windows initializing start...");
         for (int i = 0; i < WINDOW_SIZE; i++) {
-            nodes[i] = new Node();
+            nodes[i] = 0L;
         }
     }
 
-    // 获得 Record 的引用, 注意该方法会自动推进 nowOffset
-    public Record getRecord() throws Exception {
+    public void byteToHex() {
+        hash = 0;
+        while ((b = bytes[nowOffset]) != LOG_SEPARATOR) {
+            // System.out.println(bytes[i]);
+            if ('0' <= b && b <= '9') {
+                hash = hash * 16 + ((int) b - '0');
+            } else {
+                hash = hash * 16 + ((int) b - 'a') + 10;
+            }
+            nowOffset++;
+        }
+    }
+
+    // 获得所在行的编号, 注意该方法会自动推进 nowOffset
+    public int queryLineIndex() throws Exception {
         int i = 0;
 
         // 根据前几位计算桶的编号
         bucketIndex = 0;
-        for (i = nowOffset; i < nowOffset + 5; i++) {
-            int b = bytes[i];
+        while (i < 5) {
+            b = bytes[nowOffset++];
             if ('0' <= b && b <= '9') {
-                bucketIndex = bucketIndex * 16 + (b - '0');
+                bucketIndex = bucketIndex * 16 + ((int) b - '0');
             } else {
-                bucketIndex = bucketIndex * 16 + (b - 'a') + 10;
+                bucketIndex = bucketIndex * 16 + ((int) b - 'a') + 10;
             }
+            i++;
         }
 
         hash = 0;
-        for (i = nowOffset + 5; i < nowOffset + 14; ++i) {
-            hash += bytes[i];
-            hash += (hash << 10);
-            hash ^= (hash >> 6);
-        }
-        hash += (hash << 3);
-        hash ^= (hash >> 11);
-        hash += (hash << 15);
-
-        for (i = nowOffset + 14; i < nowOffset + 16; i++) {
-            if (bytes[nowOffset] != LINE_SEPARATOR) {
-                break;
+        while (i < 5 + 8) {
+            b = bytes[nowOffset++];
+            if ('0' <= b && b <= '9') {
+                hash = hash * 16 + ((int) b - '0');
+            } else {
+                hash = hash * 16 + ((int) b - 'a') + 10;
             }
+            i++;
+        }
+
+        // 处理到尾巴
+        while ((b = bytes[nowOffset]) != LOG_SEPARATOR) {
+            nowOffset++;
         }
 
         // log.info(String.format("bucketIndex: %6d, hashCode: %6d", bucketIndex, hash));
-        return buckets[bucketIndex].getRecord(threadId, hash);
+        // hash = buckets[bucketIndex].getRecord(threadId, hash);
+
+        int elements = bucketElements[bucketIndex];
+        for (int j = 0; j < elements; j++) {
+            long value = buckets[bucketIndex][j];
+            int value_low = (int) value;
+            int value_high = (int) (value >> 32);
+            // log.info("value : " + value_high + " " + value_low);
+            if (hash == (int) value) {
+                return (int) (value >> 32);
+            }
+        }
+
+        int high = lineIndex.incrementAndGet();
+        // log.info(String.format("bucketIndex: %6d, hashCode: %6d, ele: %6d", bucketIndex, hash, elements));
+
+        buckets[bucketIndex][elements] = (((long) high) << 32) + (long) hash;
+        bucketElements[bucketIndex]++;
+
+        return high;
     }
 
     // 获得 Record 的引用, 注意该方法会自动推进 nowOffset
@@ -165,18 +194,19 @@ public class ClientService extends Thread {
         hash ^= (hash >> 11);
         hash += (hash << 15);
 
-
-        buckets[bucketIndex].releaseRecord(hash);
+        // buckets[bucketIndex].releaseRecord(hash);
     }
+
+    private static ConcurrentHashMap<Long, Integer> times = new ConcurrentHashMap<>();
 
     // BIO 读取数据
     public void pullData() throws Exception {
         HttpURLConnection httpConnection = (HttpURLConnection) url.openConnection(Proxy.NO_PROXY);
-//        long start = startOffset != 0 ? startOffset - 3000_0000 : startOffset;
-//        long finish = finishOffset != contentLength ? finishOffset + 3000_0000 : finishOffset;
-//        long total = finish - start;
-//        long deal = 0;
-        log.info(String.format("Start receive file: %10d-%10d, Data path: %s", startOffset, finishOffset, path));
+        long start = startOffset != 0 ? startOffset - 3000_0000 : startOffset;
+        long finish = finishOffset != contentLength ? finishOffset + 3000_0000 : finishOffset;
+        long total = finish - start;
+        long deal = 0;
+        log.info(String.format("Start receive file: %10d-%10d, Data path: %s", start, finish, path));
         String range = String.format("bytes=%d-%d", startOffset, finishOffset);
         httpConnection.setRequestProperty("range", range);
         InputStream input = httpConnection.getInputStream();
@@ -202,37 +232,49 @@ public class ClientService extends Thread {
             // 日志坐标右移
             logOffset += readByteCount;
 
-//            // 如果不是处理第一段数据的线程, 就会有半包问题, 这时候跳过最前面的半条日志
-//            if (startOffset != 0) {
-//                while (bytes[nowOffset] != LINE_SEPARATOR) {
-//                    nowOffset++;
-//                }
-//                nowOffset++;
-//            }
-//
+            // 如果不是处理第一段数据的线程, 就会有半包问题, 这时候跳过最前面的半条日志
+            if (startOffset != 0) {
+                while (bytes[nowOffset] != LINE_SEPARATOR) {
+                    nowOffset++;
+                }
+                nowOffset++;
+            }
+
             // 循环处理所有数据
             while (nowOffset + LENGTH_PER_READ < logOffset) {
                 preOffset = nowOffset;
 
-//                // 调试用延迟
-//                // try {
-//                //     TimeUnit.MILLISECONDS.sleep(1);
-//                // } catch (InterruptedException e) {
-//                //     e.printStackTrace();
-//                // }
-//
-//                // traceId
-//                Record record = getRecord();
-//
+                // traceId
+                queryLineIndex();
+
+                // long hashCode = StringUtil.byteToHex(bytes, nowOffset, nowOffset + 16);
+                // byteToHex();
+                // System.out.println(hash);
+//                Integer k = times.get(hash);
+//                if (k == null) {
+//                    times.put(hash, lineIndex.incrementAndGet());
+//                } else {
+//                    // times.put(hash, 0);
+//                }
+
+                // times.put(hashCode, times.get(hashCode) + 1);
+
+                while (bytes[nowOffset] != LOG_SEPARATOR) {
+                    nowOffset++;
+                }
+
+
                 // 处理时间戳, spanId
                 nowOffset += 1 + 16 + 1 + 14;
 //
-//                // 滑过中间部分
-//                for (int sep = 0; sep < 6; nowOffset++) {
-//                    if (bytes[nowOffset] == LOG_SEPARATOR) {
-//                        sep++;
-//                    }
-//                }
+                // 滑过中间部分
+                sep = 0;
+                while (sep < 6) {
+                    if (bytes[nowOffset] == LOG_SEPARATOR) {
+                        sep++;
+                    }
+                    nowOffset++;
+                }
 //
 //                /*
 //                // 对拍算法
@@ -248,59 +290,65 @@ public class ClientService extends Thread {
 //
 //                // nowOffset = AhoCorasickAutomation.find(bytes, nowOffset - 1);
 //
-//                // 循环展开
-//                flag = false;
-//                while (bytes[nowOffset] != LINE_SEPARATOR) {
-//                    if (   bytes[nowOffset    ] == HTTP_STATUS_CODE[0]
-//                        && bytes[nowOffset + 1] == HTTP_STATUS_CODE[1]
-//                        && bytes[nowOffset + 2] == HTTP_STATUS_CODE[2]
-//                        && bytes[nowOffset + 3] == HTTP_STATUS_CODE[3]
-//                        && bytes[nowOffset + 4] == HTTP_STATUS_CODE[4]
-//                        && bytes[nowOffset + 5] == HTTP_STATUS_CODE[5]
-//                        && bytes[nowOffset + 6] == HTTP_STATUS_CODE[6]
-//                        && bytes[nowOffset + 7] == HTTP_STATUS_CODE[7]
-//                        && bytes[nowOffset + 8] == HTTP_STATUS_CODE[8]
-//                        && bytes[nowOffset + 9] == HTTP_STATUS_CODE[9]
-//                        && bytes[nowOffset + 10] == HTTP_STATUS_CODE[10]
-//                        && bytes[nowOffset + 11] == HTTP_STATUS_CODE[11]
-//                        && bytes[nowOffset + 12] == HTTP_STATUS_CODE[12]
-//                        && bytes[nowOffset + 13] == HTTP_STATUS_CODE[13]
-//                        && bytes[nowOffset + 14] == HTTP_STATUS_CODE[14]
-//                        && bytes[nowOffset + 15] == HTTP_STATUS_CODE[15]
-//                        && bytes[nowOffset + 16] == HTTP_STATUS_CODE[16]
-//                    ) {
-//                        if (!(bytes[nowOffset + 17] == HTTP_STATUS_CODE[17]
-//                        && bytes[nowOffset + 18] == HTTP_STATUS_CODE[18]
-//                        && bytes[nowOffset + 19] == HTTP_STATUS_CODE[19])
-//                        ) {
-//                            flag = true; break;
-//                        }
-//                    }
-//
-//                    if (   bytes[nowOffset    ] == ERROR_EQUAL_1[0]
-//                        && bytes[nowOffset + 1] == ERROR_EQUAL_1[1]
-//                        && bytes[nowOffset + 2] == ERROR_EQUAL_1[2]
-//                        && bytes[nowOffset + 3] == ERROR_EQUAL_1[3]
-//                        && bytes[nowOffset + 4] == ERROR_EQUAL_1[4]
-//                        && bytes[nowOffset + 5] == ERROR_EQUAL_1[5]
-//                        && bytes[nowOffset + 6] == ERROR_EQUAL_1[6] ) {
-//                        flag = true; break;
-//                    }
-//                    nowOffset++;
-//                }
-//
+                // 循环展开
+                flag = false;
+                while (bytes[nowOffset] != LINE_SEPARATOR) {
+                    if (bytes[nowOffset] == HTTP_STATUS_CODE[0]
+                            && bytes[nowOffset + 1] == HTTP_STATUS_CODE[1]
+                            && bytes[nowOffset + 2] == HTTP_STATUS_CODE[2]
+                            && bytes[nowOffset + 3] == HTTP_STATUS_CODE[3]
+                            && bytes[nowOffset + 4] == HTTP_STATUS_CODE[4]
+                            && bytes[nowOffset + 5] == HTTP_STATUS_CODE[5]
+                            && bytes[nowOffset + 6] == HTTP_STATUS_CODE[6]
+                            && bytes[nowOffset + 7] == HTTP_STATUS_CODE[7]
+                            && bytes[nowOffset + 8] == HTTP_STATUS_CODE[8]
+                            && bytes[nowOffset + 9] == HTTP_STATUS_CODE[9]
+                            && bytes[nowOffset + 10] == HTTP_STATUS_CODE[10]
+                            && bytes[nowOffset + 11] == HTTP_STATUS_CODE[11]
+                            && bytes[nowOffset + 12] == HTTP_STATUS_CODE[12]
+                            && bytes[nowOffset + 13] == HTTP_STATUS_CODE[13]
+                            && bytes[nowOffset + 14] == HTTP_STATUS_CODE[14]
+                            && bytes[nowOffset + 15] == HTTP_STATUS_CODE[15]
+                            && bytes[nowOffset + 16] == HTTP_STATUS_CODE[16]
+                    ) {
+                        if (!(bytes[nowOffset + 17] == HTTP_STATUS_CODE[17]
+                                && bytes[nowOffset + 18] == HTTP_STATUS_CODE[18]
+                                && bytes[nowOffset + 19] == HTTP_STATUS_CODE[19])
+                        ) {
+                            flag = true;
+                            break;
+                        }
+                    }
+
+                    if (bytes[nowOffset] == ERROR_EQUAL_1[0]
+                            && bytes[nowOffset + 1] == ERROR_EQUAL_1[1]
+                            && bytes[nowOffset + 2] == ERROR_EQUAL_1[2]
+                            && bytes[nowOffset + 3] == ERROR_EQUAL_1[3]
+                            && bytes[nowOffset + 4] == ERROR_EQUAL_1[4]
+                            && bytes[nowOffset + 5] == ERROR_EQUAL_1[5]
+                            && bytes[nowOffset + 6] == ERROR_EQUAL_1[6]) {
+                        flag = true;
+                        break;
+                    }
+                    nowOffset++;
+                }
+
                 while (bytes[nowOffset] != LINE_SEPARATOR) {
                     nowOffset++;
                 }
                 nowOffset++;
                 // log.info(preOffset + "-" + nowOffset);
 
-                fixedThreadPool.execute(new Runnable() {
-                    @Override
-                    public void run() {
-                        System.out.println(preOffset + " " + nowOffset);
-                    }
-                });
+
+//                final int start = preOffset;
+//                final int end = nowOffset;
+//                fixedThreadPool.execute(new Runnable() {
+//                    @Override
+//                    public void run() {
+//                        // System.out.println(start + " " + end);
+//
+//                    }
+//                });
 //
 //                if (flag) {
 //                    errorCount.incrementAndGet();
@@ -347,7 +395,7 @@ public class ClientService extends Thread {
     // 查询
     public static void queryRecord(byte[] traceId) throws InterruptedException, IOException {
         queryCount.incrementAndGet();
-        int bucketIndex = StringUtil.byteToHex(traceId, 0, 5);
+        // int bucketIndex = StringUtil.byteToHex(traceId, 0, 5);
         // log.info("query: " + new String(traceId));
         // buckets[bucketIndex].tryResponse(traceId.toString());
     }
@@ -405,19 +453,18 @@ public class ClientService extends Thread {
         // 共享桶结构
         log.info("Bucket initializing start...");
         for (int i = 0; i < BUCKETS_NUM; i++) {
-            buckets[i] = new Bucket();
+            // buckets[i] = new Bucket();
         }
-
-        log.info("Object pool initializing start...");
-        RecordPoolFactory factory = new RecordPoolFactory();
-        // 设置对象池的相关参数
-        GenericObjectPoolConfig poolConfig = new GenericObjectPoolConfig();
-        poolConfig.setMaxTotal(BUCKETS_NUM);
-        // 新建一个对象池,传入对象工厂和配置
-        recordPool = new GenericObjectPool<>(factory, poolConfig);
-        for (int i = 0; i < 10_0000; i++) {
-            recordPool.addObject();
-        }
+//        log.info("Object pool initializing start...");
+//        RecordPoolFactory factory = new RecordPoolFactory();
+//        // 设置对象池的相关参数
+//        GenericObjectPoolConfig poolConfig = new GenericObjectPoolConfig();
+//        poolConfig.setMaxTotal(BUCKETS_NUM);
+//        // 新建一个对象池,传入对象工厂和配置
+//        recordPool = new GenericObjectPool<>(factory, poolConfig);
+//        for (int i = 0; i < 10_0000; i++) {
+//            recordPool.addObject();
+//        }
 
         // 在最后启动 netty 进行通信
         startNetty();
@@ -433,13 +480,13 @@ public class ClientService extends Thread {
     public static void queryFileLength() throws IOException {
         HttpURLConnection httpConnection = (HttpURLConnection) url.openConnection(Proxy.NO_PROXY);
         httpConnection.setRequestMethod("HEAD");
-        Map<String, List<String>> headerFields = httpConnection.getHeaderFields();
-        Iterator iterator = headerFields.keySet().iterator();
-        while (iterator.hasNext()) {
-            String key = (String) iterator.next();
-            List values = headerFields.get(key);
-            log.info(key + ":" + values.toString());
-        }
+//        Map<String, List<String>> headerFields = httpConnection.getHeaderFields();
+//        Iterator iterator = headerFields.keySet().iterator();
+//        while (iterator.hasNext()) {
+//            String key = (String) iterator.next();
+//            List values = headerFields.get(key);
+//            log.info(key + ":" + values.toString());
+//        }
         contentLength = httpConnection.getContentLengthLong();
         httpConnection.disconnect();
     }
