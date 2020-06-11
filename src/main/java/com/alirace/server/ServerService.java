@@ -47,8 +47,6 @@ public class ServerService implements Runnable {
     // 客户端状态机, 结束机器的数量
     public static AtomicInteger doneMachineCount = new AtomicInteger(0);
 
-    public static ExecutorService pool = Executors.newFixedThreadPool(2);
-
     // 监听的端口号
     private static int PORT = 8003;
 

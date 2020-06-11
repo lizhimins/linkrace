@@ -1,5 +1,6 @@
 package com.alirace.client;
 
+import com.alirace.model.Bucket;
 import com.alirace.model.Message;
 import com.alirace.model.MessageType;
 import com.alirace.netty.MyDecoder;
@@ -68,7 +69,7 @@ public class ClientService extends Thread {
     private int nowOffset = 0; // 当前偏移
     private int logOffset = 0; // 日志偏移
 
-    private static final int BYTES_LENGTH = 256 * 1024 * 1024;
+    private static final int BYTES_LENGTH = 512 * 1024 * 1024;
     public byte[] bytes;
 
     // 找到对应的行号, 低 32 字节保存 hashcode, 高 32 字节保存行号
@@ -79,12 +80,11 @@ public class ClientService extends Thread {
     private static long[][] buckets = new long[BUCKETS_NUM][16];
 
     // 行结构
-    private static long[][] offset = new long[BUCKETS_NUM][128];
+    private static long[][] offset;
 
     // 滑动窗口, 大小配置为 2万
     private static final int WINDOW_SIZE = 20000;
     private int windowIndex;
-    // private long[] nodes = new long[WINDOW_SIZE];
     private long[] window = new long[WINDOW_SIZE];
 
     // 保存 traceId
@@ -92,15 +92,12 @@ public class ClientService extends Thread {
     private int hash = 0;
     private boolean flag = false;
     private byte b;
-    private int sep;
     private long tmp;
 
     // 构造函数
     public ClientService(String name) {
         super(name);
-
         bytes = new byte[BYTES_LENGTH + 2 * LENGTH_PER_READ];
-
         for (int i = 0; i < WINDOW_SIZE; i++) {
             window[i] = -1L;
         }
@@ -273,28 +270,15 @@ public class ClientService extends Thread {
                 nowOffset += 1 + 16 + 1 + 14;
 //
                 // 滑过中间部分
-                sep = 0;
+                int sep = 0;
                 while (sep < 6) {
                     if (bytes[nowOffset] == LOG_SEPARATOR) {
                         sep++;
                     }
                     nowOffset++;
                 }
-//
-//                /*
-//                // 对拍算法
-//                StringBuffer sb = new StringBuffer();
-//                for (int k = nowOffset; k < logOffset; k++) {
-//                    if (LINE_SEPARATOR == bytes[k]) {
-//                        break;
-//                    }
-//                    sb.append((char) bytes[k]);
-//                }
-//                boolean flag = Tag.isError(sb.toString());
-//                */
-//
-//                // nowOffset = AhoCorasickAutomation.find(bytes, nowOffset - 1);
-//
+
+
                 // 循环展开
                 flag = false;
                 while (bytes[nowOffset] != LINE_SEPARATOR) {
@@ -338,6 +322,10 @@ public class ClientService extends Thread {
                     nowOffset++;
                 }
 
+                if (flag) {
+                    errorCount.incrementAndGet();
+                }
+
                 while (bytes[nowOffset] != LINE_SEPARATOR) {
                     nowOffset++;
                 }
@@ -347,39 +335,32 @@ public class ClientService extends Thread {
                 tmp = (((long) preOffset) << 32) + (long) nowOffset;
                 // log.info(preOffset + "|" + nowOffset + "|" + tmp);
 
-                int pos = (int) offset[lineId][0];
-                offset[lineId][0]++;
-                offset[lineId][++pos] = tmp;
+                // 高位保存状态, 低位保存数据条数
+                long firstEle = offset[lineId][0];
+                int high = (int) (firstEle >> 32);
+                int low = ((int) firstEle) + 1;
+                offset[lineId][low] = tmp;
+                offset[lineId][0] = (((long) high) << 32) + (long) low;
+                // log.info(lineId + "|" + low + "|" + tmp);
 
-//                if (flag) {
-//                    errorCount.incrementAndGet();
-//                }
-//
-//                record.addNewSpan(preOffset, nowOffset, flag);
-//
                 // 窗口操作, 当前写 nodeIndex
                 // 取出2w记录之前的数据
                 // 高位存行号 低位存最大偏移
                 long val = window[windowIndex];
                 // 如果已经有数据了
                 if (val != -1) {
-                    // pre.checkAndUpload(nodes[nodeIndex].endOffset);
-                    int high = (int) (val >> 32);
-                    int low = (int) val;
-                    int length = (int) buckets[high][0];
-//                    if (low == buckets[high][length]) {
-//                        System.out.println("jieshu");
-//                    } else {
-//                        System.out.println("meijieshu");
-//                    }
-
-                    // log.info(high + " " + low + " " + length + " " + buckets[high][length]);
+                    high = (int) (val >> 32);
+                    low = (int) val;
+                    int length = (int) offset[high][0];
+                    if (low == length) {
+                        // log.info("end");
+                    } else {
+                        // log.info("not");
+                    }
+                    // log.info(high + " " + low + " " + length + " " + offset[high][length]);
                 }
-                // 覆盖写
-                // System.print(String.format("Node:%d Pre:%d  ", nodeIndex, pre));
-//                nodes[nodeIndex].record = record;
-//                nodes[nodeIndex].endOffset = nowOffset;
-                val = (((long) lineId) << 32) + (long) pos;
+                // 循环覆盖写
+                val = (((long) lineId) << 32) + (long) low;
                 window[windowIndex] = val;
                 windowIndex = (windowIndex + 1) % WINDOW_SIZE;
             }
@@ -402,14 +383,6 @@ public class ClientService extends Thread {
 //            buckets[pre].checkAndUpload(bytes, nodes[now].endOffset);
 //        }
         log.info("Client pull data finish...");
-
-
-        for (int i = 0; i < 20; i++) {
-            for (int j = 0; j < 20; j++) {
-                System.out.print(offset[i][j] + " ");
-            }
-            System.out.println();
-        }
     }
 
     // 查询
@@ -470,6 +443,8 @@ public class ClientService extends Thread {
             services.add(clientService);
         }
 
+        offset = new long[BUCKETS_NUM][108];
+
 //        // 共享桶结构
 //        log.info("Bucket initializing start...");
 //        for (int i = 0; i < BUCKETS_NUM; i++) {
@@ -510,6 +485,19 @@ public class ClientService extends Thread {
         contentLength = httpConnection.getContentLengthLong();
         httpConnection.disconnect();
     }
+
+//
+//                /*
+//                // 对拍算法
+//                StringBuffer sb = new StringBuffer();
+//                for (int k = nowOffset; k < logOffset; k++) {
+//                    if (LINE_SEPARATOR == bytes[k]) {
+//                        break;
+//                    }
+//                    sb.append((char) bytes[k]);
+//                }
+//                boolean flag = Tag.isError(sb.toString());
+//                */
 
 //    public static byte[] query(String requestOffset) throws IOException {
 //         log.info(requestOffset);
