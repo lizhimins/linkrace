@@ -84,7 +84,7 @@ public class ClientService extends Thread {
 
     // 滑动窗口, 大小配置为 2万
     private static final int WINDOW_SIZE = 20000;
-    private int windowIndex;
+    private int windowIndex = 0;
     private long[] window = new long[WINDOW_SIZE];
 
     // 保存 traceId
@@ -99,7 +99,7 @@ public class ClientService extends Thread {
         super(name);
         bytes = new byte[BYTES_LENGTH + 2 * LENGTH_PER_READ];
         for (int i = 0; i < WINDOW_SIZE; i++) {
-            window[i] = -1L;
+            window[i] = -1L; // 0x11111111
         }
     }
 
@@ -154,9 +154,6 @@ public class ClientService extends Thread {
         int elements = bucketElements[bucketIndex];
         for (int j = 0; j < elements; j++) {
             long value = buckets[bucketIndex][j];
-            int value_low = (int) value;
-            int value_high = (int) (value >> 32);
-            // log.info("value : " + value_high + " " + value_low);
             if (hash == (int) value) {
                 return (int) (value >> 32);
             }
@@ -169,34 +166,6 @@ public class ClientService extends Thread {
         bucketElements[bucketIndex]++;
 
         return line;
-    }
-
-    // 获得 Record 的引用, 注意该方法会自动推进 nowOffset
-    public static void releaseRecord(byte[] traceId) throws Exception {
-        int i = 0;
-
-        // 根据前几位计算桶的编号
-        int bucketIndex = 0;
-        for (i = 0; i < 5; i++) {
-            int b = traceId[i];
-            if ('0' <= b && b <= '9') {
-                bucketIndex = bucketIndex * 16 + (b - '0');
-            } else {
-                bucketIndex = bucketIndex * 16 + (b - 'a') + 10;
-            }
-        }
-
-        int hash = 0;
-        for (i = 5; i < 14; ++i) {
-            hash += traceId[i];
-            hash += (hash << 10);
-            hash ^= (hash >> 6);
-        }
-        hash += (hash << 3);
-        hash ^= (hash >> 11);
-        hash += (hash << 15);
-
-        // buckets[bucketIndex].releaseRecord(hash);
     }
 
     private static ConcurrentHashMap<Long, Integer> times = new ConcurrentHashMap<>();
@@ -265,7 +234,6 @@ public class ClientService extends Thread {
                     nowOffset++;
                 }
 
-
                 // 处理时间戳, spanId
                 nowOffset += 1 + 16 + 1 + 14;
 //
@@ -278,8 +246,7 @@ public class ClientService extends Thread {
                     nowOffset++;
                 }
 
-
-                // 循环展开
+                // 对 tag 的检查, 循环展开
                 flag = false;
                 while (bytes[nowOffset] != LINE_SEPARATOR) {
                     if (bytes[nowOffset] == HTTP_STATUS_CODE[0]
@@ -322,6 +289,7 @@ public class ClientService extends Thread {
                     nowOffset++;
                 }
 
+                // 如果数据包含错误统计 +1
                 if (flag) {
                     errorCount.incrementAndGet();
                 }
@@ -332,35 +300,37 @@ public class ClientService extends Thread {
                 nowOffset++;
                 // log.info(preOffset + "-" + nowOffset);
 
+                // 保存到同一个 long 上
                 tmp = (((long) preOffset) << 32) + (long) nowOffset;
                 // log.info(preOffset + "|" + nowOffset + "|" + tmp);
 
-                // 高位保存状态, 低位保存数据条数
-                long firstEle = offset[lineId][0];
-                int high = (int) (firstEle >> 32);
-                int low = ((int) firstEle) + 1;
-                offset[lineId][low] = tmp;
-                offset[lineId][0] = (((long) high) << 32) + (long) low;
-                // log.info(lineId + "|" + low + "|" + tmp);
+                // offset 数组的第一个格子, 高位保存状态, 低位保存数据条数
+                long firstOffset = offset[lineId][0];
+                int spanNum = ((int) firstOffset) + 1;
+                offset[lineId][0]++;
+                // log.info(lineId + "|" + spanNum + "|" + tmp + "|" + offset[lineId][0]);
+                deal += nowOffset - preOffset;
 
                 // 窗口操作, 当前写 nodeIndex
                 // 取出2w记录之前的数据
                 // 高位存行号 低位存最大偏移
                 long val = window[windowIndex];
                 // 如果已经有数据了
-                if (val != -1) {
-                    high = (int) (val >> 32);
-                    low = (int) val;
-                    int length = (int) offset[high][0];
-                    if (low == length) {
-                        // log.info("end");
-                    } else {
-                        // log.info("not");
+                if (val != -1L) {
+                    if (deal < 3000_0000 && threadId == 1) {
+                        break;
                     }
-                    // log.info(high + " " + low + " " + length + " " + offset[high][length]);
+                    int high = (int) (val >> 32);
+                    int maxOffset = (int) val;
+                    int length = (int) offset[high][0];
+                    if (maxOffset == length) {
+                        queryAndUpload(high);
+                        log.info("equal: " + high + " " + maxOffset + " " + length + " " + offset[high][length]);
+                    }
+                    // log.info(high + " " + maxOffset + " " + length + " " + offset[high][length] + " " + val);
                 }
                 // 循环覆盖写
-                val = (((long) lineId) << 32) + (long) low;
+                val = (((long) lineId) << 32) + (long) spanNum;
                 window[windowIndex] = val;
                 windowIndex = (windowIndex + 1) % WINDOW_SIZE;
             }
@@ -386,8 +356,12 @@ public class ClientService extends Thread {
     }
 
     // 查询
-    public static void queryRecord(byte[] traceId) throws InterruptedException, IOException {
-        queryCount.incrementAndGet();
+    public static void queryAndUpload(int lineId) throws InterruptedException, IOException {
+        long length = 0;
+        long status = offset[lineId][0];
+        int high = (int) (status >> 32); // 状态
+        int low = (int) status; // 数据条数
+        log.info(lineId + " " + high + " " + low);
         // int bucketIndex = StringUtil.byteToHex(traceId, 0, 5);
         // log.info("query: " + new String(traceId));
         // buckets[bucketIndex].tryResponse(traceId.toString());
