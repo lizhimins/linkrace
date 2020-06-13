@@ -27,11 +27,11 @@ public class HttpClientHandler extends ChannelInboundHandlerAdapter {
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         if (msg instanceof HttpResponse) {
-            HttpResponse response = (HttpResponse) msg;
-            if (HttpUtil.isContentLengthSet(response) && ClientService.contentLength == 0) {
-                ClientService.setOffsetAndRun(HttpUtil.getContentLength(response));
-                return;
-            }
+//            HttpResponse response = (HttpResponse) msg;
+//            if (HttpUtil.isContentLengthSet(response) && ClientService.contentLength == 0) {
+//                ClientService.setOffsetAndRun(HttpUtil.getContentLength(response));
+//                return;
+//            }
         }
 
         if (msg instanceof HttpContent) {

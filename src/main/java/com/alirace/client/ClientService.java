@@ -1,6 +1,5 @@
 package com.alirace.client;
 
-import com.alirace.model.Bucket;
 import com.alirace.model.Message;
 import com.alirace.model.MessageType;
 import com.alirace.netty.MyDecoder;
@@ -31,7 +30,7 @@ public class ClientService extends Thread {
 
     private static final Logger log = LoggerFactory.getLogger(ClientService.class);
 
-    protected static final int nThreads = 2;
+    protected static final int nThreads = 1;
     public static List<ClientService> services;
 
     // 通信相关参数配置
@@ -56,9 +55,6 @@ public class ClientService extends Thread {
     private static final byte[] HTTP_STATUS_CODE = "http.status_code=200".getBytes();
     private static final byte[] ERROR_EQUAL_1 = "error=1".getBytes();
     private static final int LENGTH_PER_READ = 1024 * 1024; // 每一次读 1M 2.8秒
-
-    // 文件总长度
-    protected static volatile long contentLength = 0L;
 
     // 控制偏移量
     protected long startOffset = -1L;
@@ -160,7 +156,7 @@ public class ClientService extends Thread {
         }
 
         int line = lineIndex.incrementAndGet();
-        // log.info(String.format("bucketIndex: %6d, hashCode: %6d, ele: %6d", bucketIndex, hash, elements));
+        log.info(String.format("bucketIndex: %6d, hashCode: %6d, ele: %6d", bucketIndex, hash, elements));
 
         buckets[bucketIndex][elements] = (((long) line) << 32) + (long) hash;
         bucketElements[bucketIndex]++;
@@ -174,7 +170,7 @@ public class ClientService extends Thread {
     public void pullData() throws Exception {
         HttpURLConnection httpConnection = (HttpURLConnection) url.openConnection(Proxy.NO_PROXY);
         long start = startOffset != 0 ? startOffset - 3000_0000 : startOffset;
-        long finish = finishOffset != contentLength ? finishOffset + 3000_0000 : finishOffset;
+        long finish = startOffset == 0 ? finishOffset + 3000_0000 : finishOffset;
         long total = finish - start;
         long deal = 0;
         log.info(String.format("Start receive file: %10d-%10d, Data path: %s", start, finish, path));
@@ -217,18 +213,6 @@ public class ClientService extends Thread {
 
                 // traceId
                 int lineId = queryLineIndex();
-
-                // long hashCode = StringUtil.byteToHex(bytes, nowOffset, nowOffset + 16);
-                // byteToHex();
-                // System.out.println(hash);
-//                Integer k = times.get(hash);
-//                if (k == null) {
-//                    times.put(hash, lineIndex.incrementAndGet());
-//                } else {
-//                    // times.put(hash, 0);
-//                }
-
-                // times.put(hashCode, times.get(hashCode) + 1);
 
                 while (bytes[nowOffset] != LOG_SEPARATOR) {
                     nowOffset++;
@@ -292,8 +276,10 @@ public class ClientService extends Thread {
                 // 如果数据包含错误统计 +1
                 if (flag) {
                     errorCount.incrementAndGet();
+                    offset[lineId][0] = offset[lineId][0] & 0x0000_0111_1111_1111L;
                 }
 
+                // 处理到末尾
                 while (bytes[nowOffset] != LINE_SEPARATOR) {
                     nowOffset++;
                 }
@@ -305,6 +291,7 @@ public class ClientService extends Thread {
                 // log.info(preOffset + "|" + nowOffset + "|" + tmp);
 
                 // offset 数组的第一个格子, 高位保存状态, 低位保存数据条数
+                // 状态: 0000 0000 0000 0000 0000 000error 000upload 000done
                 long firstOffset = offset[lineId][0];
                 int spanNum = ((int) firstOffset) + 1;
                 offset[lineId][0]++;
@@ -325,7 +312,7 @@ public class ClientService extends Thread {
                     int length = (int) offset[high][0];
                     if (maxOffset == length) {
                         queryAndUpload(high);
-                        log.info("equal: " + high + " " + maxOffset + " " + length + " " + offset[high][length]);
+                        // log.info("equal: " + high + " " + maxOffset + " " + length + " " + offset[high][length]);
                     }
                     // log.info(high + " " + maxOffset + " " + length + " " + offset[high][length] + " " + val);
                 }
@@ -361,7 +348,16 @@ public class ClientService extends Thread {
         long status = offset[lineId][0];
         int high = (int) (status >> 32); // 状态
         int low = (int) status; // 数据条数
-        log.info(lineId + " " + high + " " + low);
+
+        if (low == 1) {
+            responseCount.incrementAndGet();
+        }
+//        if ((high & 0x0000100) == 0x0000100) {
+//            log.info(lineId + " " + high + " " + low);
+//        }
+
+//        log.info(lineId + " " + high + " " + low);
+        // log.info(lineId + " " + high + " " + low);
         // int bucketIndex = StringUtil.byteToHex(traceId, 0, 5);
         // log.info("query: " + new String(traceId));
         // buckets[bucketIndex].tryResponse(traceId.toString());
@@ -389,7 +385,6 @@ public class ClientService extends Thread {
     }
 
     public static void setOffsetAndRun(long length) {
-        contentLength = length;
         long blockSize = length / nThreads;
         log.info(HttpHeaderNames.CONTENT_LENGTH.toString() + ": " + length + ", " + blockSize);
         for (int i = 0; i < nThreads; i++) {
@@ -419,22 +414,6 @@ public class ClientService extends Thread {
 
         offset = new long[BUCKETS_NUM][108];
 
-//        // 共享桶结构
-//        log.info("Bucket initializing start...");
-//        for (int i = 0; i < BUCKETS_NUM; i++) {
-//             buckets[i] = new Bucket();
-//        }
-//        log.info("Object pool initializing start...");
-//        RecordPoolFactory factory = new RecordPoolFactory();
-//        // 设置对象池的相关参数
-//        GenericObjectPoolConfig poolConfig = new GenericObjectPoolConfig();
-//        poolConfig.setMaxTotal(BUCKETS_NUM);
-//        // 新建一个对象池,传入对象工厂和配置
-//        recordPool = new GenericObjectPool<>(factory, poolConfig);
-//        for (int i = 0; i < 10_0000; i++) {
-//            recordPool.addObject();
-//        }
-
         // 在最后启动 netty 进行通信
         startNetty();
     }
@@ -442,11 +421,10 @@ public class ClientService extends Thread {
     public static void setPathAndPull(String path) throws IOException {
         ClientService.path = path;
         url = new URL(path);
-        queryFileLength();
-        setOffsetAndRun(contentLength);
+        setOffsetAndRun(queryFileLength());
     }
 
-    public static void queryFileLength() throws IOException {
+    public static long queryFileLength() throws IOException {
         HttpURLConnection httpConnection = (HttpURLConnection) url.openConnection(Proxy.NO_PROXY);
         httpConnection.setRequestMethod("HEAD");
 //        Map<String, List<String>> headerFields = httpConnection.getHeaderFields();
@@ -456,8 +434,9 @@ public class ClientService extends Thread {
 //            List values = headerFields.get(key);
 //            log.info(key + ":" + values.toString());
 //        }
-        contentLength = httpConnection.getContentLengthLong();
+        long contentLength = httpConnection.getContentLengthLong();
         httpConnection.disconnect();
+        return contentLength;
     }
 
 //

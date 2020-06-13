@@ -125,7 +125,7 @@ public class HttpClient extends Thread {
 
     public static void main(String[] args) throws Exception {
 
-        ClientService.contentLength = 1;
+//        ClientService.contentLength = 1;
         HttpClient.init();
         HttpClient.doConnect();
         uri = new URI("http://10.66.1.107:8004/trace1.data");
