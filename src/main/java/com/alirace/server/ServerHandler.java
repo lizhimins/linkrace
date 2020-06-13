@@ -67,26 +67,26 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
 
             // 如果当前内存中不包含 traceId 的调用链路就放入内存, 如果存在的话就合并调用链, 然后刷盘
             byte[] result = mergeMap.putIfAbsent(traceId.toString(), body);
-            if (result != null) {
-                ServerService.flushResult(traceId.toString(), body, result);
-            }
+//            if (result != null) {
+//                ServerService.flushResult(traceId.toString(), body, result);
+//            }
             return;
         }
 
         if (MessageType.RESPONSE.getValue() == message.getType()) {
             queryResponseCount.incrementAndGet();
-            byte[] body = message.getBody();
-            StringBuffer traceId = new StringBuffer(20);
-            for (int i = 0; i < 20; i++) {
-                if (body[i] == (byte) '|') {
-                    break;
-                }
-                traceId.append((char) (int) body[i]);
-            }
-            byte[] result = mergeMap.get(traceId.toString());
-            if (result != null) {
-                ServerService.flushResult(traceId.toString(), body, result);
-            }
+//            byte[] body = message.getBody();
+//            StringBuffer traceId = new StringBuffer(20);
+//            for (int i = 0; i < 20; i++) {
+//                if (body[i] == (byte) '|') {
+//                    break;
+//                }
+//                traceId.append((char) (int) body[i]);
+//            }
+//            byte[] result = mergeMap.get(traceId.toString());
+//            if (result != null) {
+//                ServerService.flushResult(traceId.toString(), body, result);
+//            }
         }
 
 //        // 如果日志流已经上报完, 只等数据回查的话

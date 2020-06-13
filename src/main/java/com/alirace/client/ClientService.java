@@ -5,6 +5,9 @@ import com.alirace.model.MessageType;
 import com.alirace.netty.MyDecoder;
 import com.alirace.netty.MyEncoder;
 import io.netty.bootstrap.Bootstrap;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.buffer.UnpooledHeapByteBuf;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
@@ -18,6 +21,7 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.Proxy;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -54,7 +58,8 @@ public class ClientService extends Thread {
     private static final byte C_SEPARATOR = (byte) 'C';
     private static final byte[] HTTP_STATUS_CODE = "http.status_code=200".getBytes();
     private static final byte[] ERROR_EQUAL_1 = "error=1".getBytes();
-    private static final int LENGTH_PER_READ = 1024 * 1024; // 每一次读 1M 2.8秒
+//    private static final int LENGTH_PER_READ = 1024 * 1024; // 每一次读 1M 2.8秒
+    private static final int LENGTH_PER_READ =  8192; // 每一次读 1M 2.8秒
 
     // 控制偏移量
     protected long startOffset = -1L;
@@ -71,7 +76,7 @@ public class ClientService extends Thread {
     // 找到对应的行号, 低 32 字节保存 hashcode, 高 32 字节保存行号
     private static final int BUCKETS_NUM = 0x01 << 20; // 100万
     private static final int TRACE_ID_HASH_CODE_AND_LINE_NUM = 16; // 每行32
-    private static AtomicInteger lineIndex = new AtomicInteger(0);
+    private static AtomicInteger lineIndex = new AtomicInteger(-1);
     private static int[] bucketElements = new int[BUCKETS_NUM];
     private static long[][] buckets = new long[BUCKETS_NUM][16];
 
@@ -87,8 +92,6 @@ public class ClientService extends Thread {
     private int bucketIndex = 0;
     private int hash = 0;
     private boolean flag = false;
-    private byte b;
-    private long tmp;
 
     // 构造函数
     public ClientService(String name) {
@@ -99,22 +102,18 @@ public class ClientService extends Thread {
         }
     }
 
-    public void byteToHex() {
-        hash = 0;
-        while ((b = bytes[nowOffset]) != LOG_SEPARATOR) {
-            // System.out.println(bytes[i]);
-            if ('0' <= b && b <= '9') {
-                hash = hash * 16 + ((int) b - '0');
-            } else {
-                hash = hash * 16 + ((int) b - 'a') + 10;
-            }
-            nowOffset++;
-        }
-    }
-
     // 获得所在行的编号, 注意该方法会自动推进 nowOffset
     public int queryLineIndex() throws Exception {
+//        StringBuffer sb = new StringBuffer(16);
+//        for (int i = nowOffset; i < 16 + nowOffset; i++) {
+//            sb.append((char) (int) bytes[i]);
+//        }
+//        log.info(sb.toString());
+
+
+        // System.out.println((char) (int) bytes[nowOffset]);
         int i = 0;
+        byte b;
 
         // 根据前几位计算桶的编号
         bucketIndex = 0;
@@ -151,20 +150,19 @@ public class ClientService extends Thread {
         for (int j = 0; j < elements; j++) {
             long value = buckets[bucketIndex][j];
             if (hash == (int) value) {
+                // log.info(String.format("bucketIndex: %6d, hashCode: %6d, ele: %6d", bucketIndex, hash, elements));
                 return (int) (value >> 32);
             }
         }
 
         int line = lineIndex.incrementAndGet();
-        log.info(String.format("bucketIndex: %6d, hashCode: %6d, ele: %6d", bucketIndex, hash, elements));
+        // log.info(String.format("bucketIndex: %6d, hashCode: %6d, ele: %6d", bucketIndex, hash, elements));
 
-        buckets[bucketIndex][elements] = (((long) line) << 32) + (long) hash;
+        buckets[bucketIndex][elements] = ((long) hash & 0xFFFFFFFFL) | (((long) line << 32) & 0xFFFFFFFF00000000L);
         bucketElements[bucketIndex]++;
 
         return line;
     }
-
-    private static ConcurrentHashMap<Long, Integer> times = new ConcurrentHashMap<>();
 
     // BIO 读取数据
     public void pullData() throws Exception {
@@ -182,6 +180,9 @@ public class ClientService extends Thread {
         preOffset = LENGTH_PER_READ;
         nowOffset = LENGTH_PER_READ;
         logOffset = LENGTH_PER_READ;
+//        preOffset = 0;
+//        nowOffset = 0;
+//        logOffset = 0;
 
         // 读入一小段数据
         int readByteCount = input.read(bytes, logOffset, LENGTH_PER_READ);
@@ -206,6 +207,10 @@ public class ClientService extends Thread {
                 }
                 nowOffset++;
             }
+
+//            if (++times >= 1000) {
+//                break;
+//            }
 
             // 循环处理所有数据
             while (nowOffset + LENGTH_PER_READ < logOffset) {
@@ -273,28 +278,28 @@ public class ClientService extends Thread {
                     nowOffset++;
                 }
 
-                // 如果数据包含错误统计 +1
-                if (flag) {
-                    errorCount.incrementAndGet();
-                    offset[lineId][0] = offset[lineId][0] & 0x0000_0111_1111_1111L;
-                }
-
                 // 处理到末尾
                 while (bytes[nowOffset] != LINE_SEPARATOR) {
                     nowOffset++;
                 }
-                nowOffset++;
+
                 // log.info(preOffset + "-" + nowOffset);
 
                 // 保存到同一个 long 上
-                tmp = (((long) preOffset) << 32) + (long) nowOffset;
-                // log.info(preOffset + "|" + nowOffset + "|" + tmp);
-
                 // offset 数组的第一个格子, 高位保存状态, 低位保存数据条数
-                // 状态: 0000 0000 0000 0000 0000 000error 000upload 000done
-                long firstOffset = offset[lineId][0];
-                int spanNum = ((int) firstOffset) + 1;
-                offset[lineId][0]++;
+                // 状态: 0000 0000 0000 0000 0000 0000 000error 000done
+                offset[lineId][0]++; // 数量 +1
+
+                // 如果数据包含错误统计 +1
+                if (flag) {
+                    errorCount.incrementAndGet();
+                    offset[lineId][0] |= (0x1L << 36);
+                }
+
+                long firstElement = offset[lineId][0];
+                int spanNum = (int) firstElement;
+                // 保存偏移量
+                offset[lineId][spanNum] = (((long) preOffset << 32) & 0xFFFFFFFF00000000L) | ((long) nowOffset & 0xFFFFFFFFL);
                 // log.info(lineId + "|" + spanNum + "|" + tmp + "|" + offset[lineId][0]);
                 deal += nowOffset - preOffset;
 
@@ -320,6 +325,9 @@ public class ClientService extends Thread {
                 val = (((long) lineId) << 32) + (long) spanNum;
                 window[windowIndex] = val;
                 windowIndex = (windowIndex + 1) % WINDOW_SIZE;
+
+                // 最后一个符号是 \n
+                nowOffset++;
             }
 
             // 如果太长了要从头开始写
@@ -334,33 +342,124 @@ public class ClientService extends Thread {
             }
         }
 
-//        for (int i = nodeIndex; i < nodeIndex + WINDOW_SIZE; i++) {
-//            int now = i % 20000;
-//            int pre = nodes[now].bucketIndex;
-//            buckets[pre].checkAndUpload(bytes, nodes[now].endOffset);
-//        }
+        for (int i = windowIndex; i < windowIndex + WINDOW_SIZE; i++) {
+            int now = i % 20000;
+            long val = window[now];
+            int high = (int) (val >> 32);
+            int maxOffset = (int) val;
+            int length = (int) offset[high][0];
+            if (maxOffset == length) {
+                queryAndUpload(high);
+                // log.info("equal: " + high + " " + maxOffset + " " + length + " " + offset[high][length]);
+            }
+        }
         log.info("Client pull data finish...");
     }
 
     // 查询
-    public static void queryAndUpload(int lineId) throws InterruptedException, IOException {
-        long length = 0;
+    public void queryAndUpload(int lineId) {
+        // 状态: 0000 0000 0000 0000 0000 0000 000error 000done
+        offset[lineId][0] |= (0x001L << 32);
         long status = offset[lineId][0];
         int high = (int) (status >> 32); // 状态
         int low = (int) status; // 数据条数
-
-        if (low == 1) {
-            responseCount.incrementAndGet();
+        // log.info(String.format("%h", status));
+        if ((high & 0x10) == 0x10) {
+            offset[lineId][0] |= (0x010L << 32); // 标记上传过了
+            int length = 0;
+            for (int i = 1; i <= low; i++) {
+                long value = offset[lineId][i];
+                int start = (int) (value >> 32);
+                int end = (int) value;
+                length += end - start;
+            }
+            ByteBuf body = Unpooled.buffer(length);
+            for (int i = 1; i <= low; i++) {
+                long value = offset[lineId][i];
+                int start = (int) (value >> 32);
+                int end = (int) value;
+                body.writeBytes(bytes, start, end - start + 1);
+            }
+            upload(body.array());
+            // log.info(new String(body.array()));
+            body.release();
         }
-//        if ((high & 0x0000100) == 0x0000100) {
-//            log.info(lineId + " " + high + " " + low);
-//        }
+    }
 
-//        log.info(lineId + " " + high + " " + low);
-        // log.info(lineId + " " + high + " " + low);
-        // int bucketIndex = StringUtil.byteToHex(traceId, 0, 5);
-        // log.info("query: " + new String(traceId));
-        // buckets[bucketIndex].tryResponse(traceId.toString());
+    public void queryAndResponse(byte[] traceId) {
+        queryCount.incrementAndGet();
+        log.info(new String(traceId));
+
+        // 根据前几位计算桶的编号
+        int bucketIndex1 = 0;
+        for (int i = 0; i < 5; i++) {
+            byte b = traceId[i];
+            if ('0' <= b && b <= '9') {
+                bucketIndex1 = bucketIndex1 * 16 + ((int) b - '0');
+            } else {
+                bucketIndex1 = bucketIndex1 * 16 + ((int) b - 'a') + 10;
+            }
+        }
+
+        int hashCode = 0;
+        for (int i = 5; i < 13; i++) {
+            byte b = traceId[i];
+            if ('0' <= b && b <= '9') {
+                hashCode = hashCode * 16 + ((int) b - '0');
+            } else {
+                hashCode = hashCode * 16 + ((int) b - 'a') + 10;
+            }
+        }
+
+        // log.info(String.format("bucketIndex: %6d, hashCode: %6d", bucketIndex1, hashCode));
+        // hash = buckets[bucketIndex].getRecord(threadId, hash);
+
+        int lineId = -2;
+        int elements = bucketElements[bucketIndex1];
+        for (int j = 0; j < elements; j++) {
+            long value = buckets[bucketIndex][j];
+            if (hashCode == (int) value) {
+                lineId = (int) (value >> 32);
+            }
+        }
+
+        // 状态: 0000 0000 0000 0000 0000 0000 000error 000done
+        // 如果找到行
+        if (lineId != -2) {
+            // 没有结束
+            long tmp = offset[lineId][0];
+            if ((tmp & (0x1L << 36)) == (0x1L << 36)) {
+                offset[lineId][0] |= (0x1L << 40); // 错误标记
+                responseCount.incrementAndGet();
+            } else {
+                // 已经结束了
+                int low = (int) tmp; // 数据条数
+                // log.info(String.format("%h", status));
+                int length = 0;
+                for (int i = 1; i <= low; i++) {
+                    long value = offset[lineId][i];
+                    int start = (int) (value >> 32);
+                    int end = (int) value;
+                    length += end - start;
+                }
+                ByteBuf body = Unpooled.buffer(length);
+                for (int i = 1; i <= low; i++) {
+                    long value = offset[lineId][i];
+                    int start = (int) (value >> 32);
+                    int end = (int) value;
+                    body.writeBytes(bytes, start, end - start + 1);
+                }
+                response(body.array());
+                // log.info(new String(body.array()));
+                body.release();
+                responseCount.incrementAndGet();
+            }
+        } else {
+            // 没找到行就新建行
+            lineId = lineIndex.incrementAndGet();
+            responseCount.incrementAndGet();
+            offset[lineId][0] |= (0x1L << 40);
+        }
     }
 
     // 上传调用链
@@ -379,7 +478,6 @@ public class ClientService extends Thread {
 
     // 查询响应
     public static void response(byte[] bytes) {
-        responseCount.incrementAndGet();
         Message message = new Message(MessageType.RESPONSE.getValue(), bytes);
         future.channel().writeAndFlush(message);
     }
@@ -495,6 +593,16 @@ public class ClientService extends Thread {
         try {
             pullData();
             // log.info("errorCount: " + errorCount);
+
+//            for (int i = 0; i < 100; i++) {
+//                for (int j = 0; j < 36; j++) {
+//                    long value = offset[i][j];
+//                    int high = (int) (value >> 32);
+//                    int low = (int) value;
+//                    System.out.print(String.format("%d-%d ", high, low));
+//                }
+//                System.out.println();
+//            }
         } catch (Exception e) {
             e.printStackTrace();
         }

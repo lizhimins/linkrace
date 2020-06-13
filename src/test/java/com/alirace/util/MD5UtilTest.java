@@ -12,6 +12,12 @@ public class MD5UtilTest {
     }
 
     @Test
+    public void lengthTest() {
+        String line = "25e96069548f2098|1590216545615123|73fc550c6c11940f|688be09e2d4f5db4|495|Frontend|DoGetAppList|192.168.0.63|&component=java-spring-rest-template&span.kind=client&http.url=http://localhost:9001/getItem?id=5&peer.port=9001&http.method=GET\n";
+        System.out.println(line.length());
+        System.out.println(line.length() + 8192);
+    }
+    @Test
     public void test() {
         String str = ""
                 + "447eb726d7d5e8c9|1590216545652169|447eb726d7d5e8c9|0|1261|LogisticsCenter|DoQueryStatData|192.168.58.85|biz=fxtius&sampler.type=const&sampler.param=1\n"
