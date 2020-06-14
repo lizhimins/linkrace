@@ -7,7 +7,6 @@ import com.alirace.netty.MyEncoder;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import io.netty.buffer.UnpooledHeapByteBuf;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
@@ -22,10 +21,8 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.Proxy;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -35,7 +32,7 @@ public class ClientService extends Thread {
 
     private static final Logger log = LoggerFactory.getLogger(ClientService.class);
 
-    protected static final int nThreads = 1;
+    protected static final int nThreads = 2;
     public static List<ClientService> services;
 
     // 通信相关参数配置
@@ -217,39 +214,39 @@ public class ClientService extends Thread {
         // 保存到同一个 long 上
         // offset 数组的第一个格子, 高位保存状态, 低位保存数据条数
         // 状态: 0000 0000 0000 0000 0000 0000 000error 000done
-        offset[lineId][0]++; // 数量 +1
+//        offset[lineId][0]++; // 数量 +1
+//
+//        // 如果数据包含错误统计 +1
+//        if (checkTag()) {
+//            errorCount.incrementAndGet();
+//            offset[lineId][0] |= (0x1L << 36);
+//        }
 
-        // 如果数据包含错误统计 +1
-        if (checkTag()) {
-            errorCount.incrementAndGet();
-            offset[lineId][0] |= (0x1L << 36);
-        }
+//        long firstElement = offset[lineId][0];
+//        int spanNum = (int) firstElement;
+//        // 保存偏移量
+//        offset[lineId][spanNum] = (((long) preOffset << 32) & 0xFFFFFFFF00000000L) | ((long) nowOffset & 0xFFFFFFFFL);
+//        // log.info(lineId + "|" + spanNum + "|" + tmp + "|" + offset[lineId][0]);
 
-        long firstElement = offset[lineId][0];
-        int spanNum = (int) firstElement;
-        // 保存偏移量
-        offset[lineId][spanNum] = (((long) preOffset << 32) & 0xFFFFFFFF00000000L) | ((long) nowOffset & 0xFFFFFFFFL);
-        // log.info(lineId + "|" + spanNum + "|" + tmp + "|" + offset[lineId][0]);
-
-        // 窗口操作, 当前写 nodeIndex
-        // 取出2w记录之前的数据
-        // 高位存行号 低位存最大偏移
-        long val = window[windowIndex];
-        // 如果已经有数据了
-        if (val != -1L) {
-            int high = (int) (val >> 32);
-            int maxOffset = (int) val;
-            int length = (int) offset[high][0];
-            if (maxOffset == length) {
-                // queryAndUpload(high);
-                // log.info("equal: " + high + " " + maxOffset + " " + length + " " + offset[high][length]);
-            }
-            // log.info(high + " " + maxOffset + " " + length + " " + offset[high][length] + " " + val);
-        }
-        // 循环覆盖写
-        val = (((long) lineId) << 32) + (long) spanNum;
-        window[windowIndex] = val;
-        windowIndex = (windowIndex + 1) % WINDOW_SIZE;
+//        // 窗口操作, 当前写 nodeIndex
+//        // 取出2w记录之前的数据
+//        // 高位存行号 低位存最大偏移
+//        long val = window[windowIndex];
+//        // 如果已经有数据了
+//        if (val != -1L) {
+//            int high = (int) (val >> 32);
+//            int maxOffset = (int) val;
+//            int length = (int) offset[high][0];
+//            if (maxOffset == length) {
+//                queryAndUpload(high);
+//                // log.info("equal: " + high + " " + maxOffset + " " + length + " " + offset[high][length]);
+//            }
+//            // log.info(high + " " + maxOffset + " " + length + " " + offset[high][length] + " " + val);
+//        }
+//        // 循环覆盖写
+//        val = (((long) lineId) << 32) + (long) spanNum;
+//        window[windowIndex] = val;
+//        windowIndex = (windowIndex + 1) % WINDOW_SIZE;
 
         // 最后一个符号是 \n
         nowOffset++;
@@ -316,17 +313,18 @@ public class ClientService extends Thread {
             }
         }
 
-        for (int i = windowIndex; i < windowIndex + WINDOW_SIZE; i++) {
-            int now = i % 20000;
-            long val = window[now];
-            int high = (int) (val >> 32);
-            int maxOffset = (int) val;
-            int length = (int) offset[high][0];
-            if (maxOffset == length) {
-                queryAndUpload(high);
-                // log.info("equal: " + high + " " + maxOffset + " " + length + " " + offset[high][length]);
-            }
-        }
+        // 窗口
+//        for (int i = windowIndex; i < windowIndex + WINDOW_SIZE; i++) {
+//            int now = i % 20000;
+//            long val = window[now];
+//            int high = (int) (val >> 32);
+//            int maxOffset = (int) val;
+//            int length = (int) offset[high][0];
+//            if (maxOffset == length) {
+//                queryAndUpload(high);
+//                // log.info("equal: " + high + " " + maxOffset + " " + length + " " + offset[high][length]);
+//            }
+//        }
         log.info("Client pull data finish...");
     }
 
@@ -476,7 +474,7 @@ public class ClientService extends Thread {
         log.info("Client initializing start...");
 
         // 监控服务
-        ClientMonitor.start();
+        // ClientMonitor.start();
 
         services = new ArrayList<>(nThreads);
         for (int i = 0; i < nThreads; i++) {
@@ -484,7 +482,7 @@ public class ClientService extends Thread {
             services.add(clientService);
         }
 
-        offset = new long[BUCKETS_NUM][108];
+//        offset = new long[BUCKETS_NUM][108];
 
         // 在最后启动 netty 进行通信
         startNetty();
@@ -515,7 +513,10 @@ public class ClientService extends Thread {
     @Override
     public void run() {
         try {
+            long startTime = System.currentTimeMillis();
             pullData();
+            long endTime = System.currentTimeMillis();
+            log.info("It cost time: " + (endTime - startTime) + " ms.");
 //            for (int i = 0; i < 100; i++) {
 //                for (int j = 0; j < 36; j++) {
 //                    long value = offset[i][j];
