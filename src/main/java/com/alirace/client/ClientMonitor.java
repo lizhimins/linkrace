@@ -40,7 +40,7 @@ public class ClientMonitor implements Runnable {
         while (true) {
             try {
                 printStatus();
-                TimeUnit.MILLISECONDS.sleep(2000);
+                TimeUnit.MILLISECONDS.sleep(1000);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }

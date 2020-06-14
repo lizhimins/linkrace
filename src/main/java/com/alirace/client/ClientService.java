@@ -16,6 +16,7 @@ import io.netty.handler.codec.http.HttpHeaderNames;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -91,7 +92,8 @@ public class ClientService extends Thread {
     // 保存 traceId
     private int bucketIndex = 0;
     private int hash = 0;
-    private boolean flag = false;
+
+    private StringBuffer sb = new StringBuffer();
 
     // 构造函数
     public ClientService(String name) {
@@ -164,6 +166,95 @@ public class ClientService extends Thread {
         return line;
     }
 
+    public boolean checkTag() {
+
+//        System.out.println((char) (int) bytes[nowOffset - 4]);
+//        System.out.println((char) (int) bytes[nowOffset - 3]);
+//        System.out.println((char) (int) bytes[nowOffset - 2]);
+//        System.out.println((char) (int) bytes[nowOffset - 1]);
+
+        // http.status_code=200\n
+        if (   bytes[nowOffset - 9] == (byte) (int) '_'
+                && bytes[nowOffset - 4] == (byte) (int) '=') {
+            if (!(bytes[nowOffset - 3] == (byte) (int) '2'
+                    && bytes[nowOffset - 2] == (byte) (int) '0'
+                    && bytes[nowOffset - 1] == (byte) (int) '0')
+            ) {
+                return true;
+            }
+        }
+
+        // error=1\n
+        if (   bytes[nowOffset - 4] == (byte) (int) 'o'
+                && bytes[nowOffset - 3] == (byte) (int) 'r'
+                && bytes[nowOffset - 2] == (byte) (int) '='
+                && bytes[nowOffset - 1] == (byte) (int) '1'
+        ) {
+            return true;
+        }
+        return false;
+    }
+
+    public void scanData() throws Exception {
+        preOffset = nowOffset;
+
+        // traceId
+        int lineId = queryLineIndex();
+
+        while (bytes[nowOffset] != LOG_SEPARATOR) {
+            nowOffset++;
+        }
+
+        // 处理时间戳, spanId
+        nowOffset += 70;
+
+        // 处理到末尾
+        while (bytes[nowOffset] != LINE_SEPARATOR) {
+            nowOffset++;
+        }
+        // log.info(preOffset + "-" + nowOffset);
+
+        // 保存到同一个 long 上
+        // offset 数组的第一个格子, 高位保存状态, 低位保存数据条数
+        // 状态: 0000 0000 0000 0000 0000 0000 000error 000done
+        offset[lineId][0]++; // 数量 +1
+
+        // 如果数据包含错误统计 +1
+        if (checkTag()) {
+            errorCount.incrementAndGet();
+            offset[lineId][0] |= (0x1L << 36);
+        }
+
+        long firstElement = offset[lineId][0];
+        int spanNum = (int) firstElement;
+        // 保存偏移量
+        offset[lineId][spanNum] = (((long) preOffset << 32) & 0xFFFFFFFF00000000L) | ((long) nowOffset & 0xFFFFFFFFL);
+        // log.info(lineId + "|" + spanNum + "|" + tmp + "|" + offset[lineId][0]);
+
+        // 窗口操作, 当前写 nodeIndex
+        // 取出2w记录之前的数据
+        // 高位存行号 低位存最大偏移
+        long val = window[windowIndex];
+        // 如果已经有数据了
+        if (val != -1L) {
+            int high = (int) (val >> 32);
+            int maxOffset = (int) val;
+            int length = (int) offset[high][0];
+            if (maxOffset == length) {
+                // queryAndUpload(high);
+                // log.info("equal: " + high + " " + maxOffset + " " + length + " " + offset[high][length]);
+            }
+            // log.info(high + " " + maxOffset + " " + length + " " + offset[high][length] + " " + val);
+        }
+        // 循环覆盖写
+        val = (((long) lineId) << 32) + (long) spanNum;
+        window[windowIndex] = val;
+        windowIndex = (windowIndex + 1) % WINDOW_SIZE;
+
+        // 最后一个符号是 \n
+        nowOffset++;
+    }
+
     // BIO 读取数据
     public void pullData() throws Exception {
         HttpURLConnection httpConnection = (HttpURLConnection) url.openConnection(Proxy.NO_PROXY);
@@ -180,9 +271,6 @@ public class ClientService extends Thread {
         preOffset = LENGTH_PER_READ;
         nowOffset = LENGTH_PER_READ;
         logOffset = LENGTH_PER_READ;
-//        preOffset = 0;
-//        nowOffset = 0;
-//        logOffset = 0;
 
         // 读入一小段数据
         int readByteCount = input.read(bytes, logOffset, LENGTH_PER_READ);
@@ -194,6 +282,9 @@ public class ClientService extends Thread {
 
             // 文件结束退出
             if (readByteCount == -1) {
+                while (nowOffset < logOffset) {
+                    scanData();
+                }
                 break;
             }
 
@@ -208,130 +299,13 @@ public class ClientService extends Thread {
                 nowOffset++;
             }
 
-//            if (++times >= 1000) {
-//                break;
-//            }
-
             // 循环处理所有数据
             while (nowOffset + LENGTH_PER_READ < logOffset) {
-                preOffset = nowOffset;
-
-                // traceId
-                int lineId = queryLineIndex();
-
-                while (bytes[nowOffset] != LOG_SEPARATOR) {
-                    nowOffset++;
-                }
-
-                // 处理时间戳, spanId
-                nowOffset += 1 + 16 + 1 + 14;
-//
-                // 滑过中间部分
-                int sep = 0;
-                while (sep < 6) {
-                    if (bytes[nowOffset] == LOG_SEPARATOR) {
-                        sep++;
-                    }
-                    nowOffset++;
-                }
-
-                // 对 tag 的检查, 循环展开
-                flag = false;
-                while (bytes[nowOffset] != LINE_SEPARATOR) {
-                    if (bytes[nowOffset] == HTTP_STATUS_CODE[0]
-                            && bytes[nowOffset + 1] == HTTP_STATUS_CODE[1]
-                            && bytes[nowOffset + 2] == HTTP_STATUS_CODE[2]
-                            && bytes[nowOffset + 3] == HTTP_STATUS_CODE[3]
-                            && bytes[nowOffset + 4] == HTTP_STATUS_CODE[4]
-                            && bytes[nowOffset + 5] == HTTP_STATUS_CODE[5]
-                            && bytes[nowOffset + 6] == HTTP_STATUS_CODE[6]
-                            && bytes[nowOffset + 7] == HTTP_STATUS_CODE[7]
-                            && bytes[nowOffset + 8] == HTTP_STATUS_CODE[8]
-                            && bytes[nowOffset + 9] == HTTP_STATUS_CODE[9]
-                            && bytes[nowOffset + 10] == HTTP_STATUS_CODE[10]
-                            && bytes[nowOffset + 11] == HTTP_STATUS_CODE[11]
-                            && bytes[nowOffset + 12] == HTTP_STATUS_CODE[12]
-                            && bytes[nowOffset + 13] == HTTP_STATUS_CODE[13]
-                            && bytes[nowOffset + 14] == HTTP_STATUS_CODE[14]
-                            && bytes[nowOffset + 15] == HTTP_STATUS_CODE[15]
-                            && bytes[nowOffset + 16] == HTTP_STATUS_CODE[16]
-                    ) {
-                        if (!(bytes[nowOffset + 17] == HTTP_STATUS_CODE[17]
-                                && bytes[nowOffset + 18] == HTTP_STATUS_CODE[18]
-                                && bytes[nowOffset + 19] == HTTP_STATUS_CODE[19])
-                        ) {
-                            flag = true;
-                            break;
-                        }
-                    }
-
-                    if (bytes[nowOffset] == ERROR_EQUAL_1[0]
-                            && bytes[nowOffset + 1] == ERROR_EQUAL_1[1]
-                            && bytes[nowOffset + 2] == ERROR_EQUAL_1[2]
-                            && bytes[nowOffset + 3] == ERROR_EQUAL_1[3]
-                            && bytes[nowOffset + 4] == ERROR_EQUAL_1[4]
-                            && bytes[nowOffset + 5] == ERROR_EQUAL_1[5]
-                            && bytes[nowOffset + 6] == ERROR_EQUAL_1[6]) {
-                        flag = true;
-                        break;
-                    }
-                    nowOffset++;
-                }
-
-                // 处理到末尾
-                while (bytes[nowOffset] != LINE_SEPARATOR) {
-                    nowOffset++;
-                }
-
-                // log.info(preOffset + "-" + nowOffset);
-
-                // 保存到同一个 long 上
-                // offset 数组的第一个格子, 高位保存状态, 低位保存数据条数
-                // 状态: 0000 0000 0000 0000 0000 0000 000error 000done
-                offset[lineId][0]++; // 数量 +1
-
-                // 如果数据包含错误统计 +1
-                if (flag) {
-                    errorCount.incrementAndGet();
-                    offset[lineId][0] |= (0x1L << 36);
-                }
-
-                long firstElement = offset[lineId][0];
-                int spanNum = (int) firstElement;
-                // 保存偏移量
-                offset[lineId][spanNum] = (((long) preOffset << 32) & 0xFFFFFFFF00000000L) | ((long) nowOffset & 0xFFFFFFFFL);
-                // log.info(lineId + "|" + spanNum + "|" + tmp + "|" + offset[lineId][0]);
-                deal += nowOffset - preOffset;
-
-                // 窗口操作, 当前写 nodeIndex
-                // 取出2w记录之前的数据
-                // 高位存行号 低位存最大偏移
-                long val = window[windowIndex];
-                // 如果已经有数据了
-                if (val != -1L) {
-                    if (deal < 3000_0000 && threadId == 1) {
-                        break;
-                    }
-                    int high = (int) (val >> 32);
-                    int maxOffset = (int) val;
-                    int length = (int) offset[high][0];
-                    if (maxOffset == length) {
-                        queryAndUpload(high);
-                        // log.info("equal: " + high + " " + maxOffset + " " + length + " " + offset[high][length]);
-                    }
-                    // log.info(high + " " + maxOffset + " " + length + " " + offset[high][length] + " " + val);
-                }
-                // 循环覆盖写
-                val = (((long) lineId) << 32) + (long) spanNum;
-                window[windowIndex] = val;
-                windowIndex = (windowIndex + 1) % WINDOW_SIZE;
-
-                // 最后一个符号是 \n
-                nowOffset++;
+                scanData();
             }
 
             // 如果太长了要从头开始写
-            if (logOffset > BYTES_LENGTH + LENGTH_PER_READ) {
+            if (nowOffset >= BYTES_LENGTH + LENGTH_PER_READ) {
                 // 拷贝末尾的数据
                 for (int i = nowOffset; i < logOffset; i++) {
                     bytes[i - BYTES_LENGTH] = bytes[i];
@@ -522,78 +496,26 @@ public class ClientService extends Thread {
         setOffsetAndRun(queryFileLength());
     }
 
+    // 获得文件大小
     public static long queryFileLength() throws IOException {
         HttpURLConnection httpConnection = (HttpURLConnection) url.openConnection(Proxy.NO_PROXY);
         httpConnection.setRequestMethod("HEAD");
-//        Map<String, List<String>> headerFields = httpConnection.getHeaderFields();
-//        Iterator iterator = headerFields.keySet().iterator();
-//        while (iterator.hasNext()) {
-//            String key = (String) iterator.next();
-//            List values = headerFields.get(key);
-//            log.info(key + ":" + values.toString());
-//        }
+        // Map<String, List<String>> headerFields = httpConnection.getHeaderFields();
+        // Iterator iterator = headerFields.keySet().iterator();
+        // while (iterator.hasNext()) {
+        //     String key = (String) iterator.next();
+        //     List values = headerFields.get(key);
+        //     log.info(key + ":" + values.toString());
+        // }
         long contentLength = httpConnection.getContentLengthLong();
         httpConnection.disconnect();
         return contentLength;
     }
 
-//
-//                /*
-//                // 对拍算法
-//                StringBuffer sb = new StringBuffer();
-//                for (int k = nowOffset; k < logOffset; k++) {
-//                    if (LINE_SEPARATOR == bytes[k]) {
-//                        break;
-//                    }
-//                    sb.append((char) bytes[k]);
-//                }
-//                boolean flag = Tag.isError(sb.toString());
-//                */
-
-//    public static byte[] query(String requestOffset) throws IOException {
-//         log.info(requestOffset);
-//        Request request = new Request.Builder()
-//                .url(url)
-//                .header("range", requestOffset)
-//                .build();
-//
-//        // 返回的结果
-//        byte[] bytes = client.newCall(request).execute().body().bytes();
-//
-//        // 结果合并处理
-//        int index = 0, length = bytes.length;
-//        byte[] result = new byte[length];
-//        int pos = 0;
-//
-//        while (index < length) {
-//            if (bytes[index] == LINE_SEPARATOR || bytes[index] == CR_SEPARATOR
-//                    || bytes[index] == MINUS_SEPARATOR || bytes[index] == C_SEPARATOR) {
-//                for ( ; index < length; index++) {
-//                    if (bytes[index] == LINE_SEPARATOR) {
-//                        break;
-//                    }
-//                }
-//                index++;
-//            } else {
-//                for ( ; index < length; index++) {
-//                    result[pos++] = bytes[index];
-//                    if (bytes[index] == LINE_SEPARATOR) {
-//                        break;
-//                    }
-//                }
-//                index++;
-//            }
-//        }
-//        // log.info(new String(result, 0, pos));
-//        return new String(result, 0, pos).getBytes();
-//    }
-
     @Override
     public void run() {
         try {
             pullData();
-            // log.info("errorCount: " + errorCount);
-
 //            for (int i = 0; i < 100; i++) {
 //                for (int j = 0; j < 36; j++) {
 //                    long value = offset[i][j];
@@ -602,6 +524,16 @@ public class ClientService extends Thread {
 //                    System.out.print(String.format("%d-%d ", high, low));
 //                }
 //                System.out.println();
+//            }
+//
+//            FileWriter fileWriter = null;
+//            try {
+//                fileWriter = new FileWriter("/root/1.data");
+//                fileWriter.write(sb.toString());
+//                fileWriter.flush();
+//                fileWriter.close();
+//            } catch (IOException e) {
+//                e.printStackTrace();
 //            }
         } catch (Exception e) {
             e.printStackTrace();
