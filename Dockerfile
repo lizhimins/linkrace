@@ -1,12 +1,12 @@
 # Builder
 FROM maven:3-jdk-8-slim AS builder
 
-#RUN mkdir /opt/linkTracking
+RUN mkdir /opt/linkTracking
 WORKDIR /opt/linkTracking
 #RUN rm -rf /usr/share/maven/conf/settings.xml
 COPY . ./
 #COPY sh/settings.xml /usr/share/maven/conf/
-#RUN mvn -Ppackage-all -DskipTests clean install -U
+RUN mvn -Ppackage-all -DskipTests clean install -U
 
 # App
 FROM openjdk:8-jre-slim
