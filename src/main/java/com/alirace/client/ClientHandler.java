@@ -9,8 +9,6 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.print.DocFlavor;
-
 import static com.alirace.client.ClientService.doConnect;
 import static com.alirace.client.ClientService.lineIndex;
 
@@ -45,14 +43,17 @@ public class ClientHandler extends SimpleChannelInboundHandler<Object> {
             log.info(query);
             String[] split = query.split(",");
             for (int i = 0; i < split.length; i++) {
-                if (split[i] != null && split.length == 16) {
+                if (split[i] != null && split.length > 10) {
                     int lineIndex = ClientService.calLineIndex(split[i]);
                     // log.info("Set: " + split[i]);
-                    ClientService.offset[lineIndex][0] = 1L; // 设置错误
+                    if (lineIndex != -1) {
+                        ClientService.offset[lineIndex][0] = 1L; // 设置错误
+                    }
                 }
             }
 
             ClientService.services.get(0).finish2();
+            ClientService.services.get(0).callFinish2();
             return;
         }
 
@@ -92,7 +93,7 @@ public class ClientHandler extends SimpleChannelInboundHandler<Object> {
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable e) throws Exception {
         Channel channel = ctx.channel();
         System.out.println("[" + channel.remoteAddress() + "] disConnect");
-        // e.printStackTrace();
+        e.printStackTrace();
         ctx.close().sync();
         doConnect();
     }

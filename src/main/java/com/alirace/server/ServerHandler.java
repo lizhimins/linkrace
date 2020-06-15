@@ -3,6 +3,8 @@ package com.alirace.server;
 import com.alirace.controller.CommonController;
 import com.alirace.model.Message;
 import com.alirace.model.MessageType;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
@@ -38,12 +40,21 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
         // 动态代理
 
         if (MessageType.PASS.getValue() == message.getType()) {
-            // log.info(new String(message.getBody()));
-            for (Channel ch : group) {
-                if (ch != channel) {
-                    ch.writeAndFlush(message);
+            byte[] body = message.getBody();
+            StringBuffer buffer = new StringBuffer(20);
+            for (int i = 0; i < 20; i++) {
+                if (body[i] == (byte) '|') {
+                    break;
                 }
+                buffer.append((char) (int) body[i]);
             }
+            String traceId = buffer.toString();
+            ByteBuf byteBuf = mergeMap2.get(traceId);
+            if (byteBuf == null) {
+                byteBuf = Unpooled.buffer();
+                mergeMap2.put(traceId, byteBuf);
+            }
+            byteBuf.writeBytes(body);
         }
 
         // 如果是上传数据
@@ -96,6 +107,14 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
                 for (Channel ch : group) {
                     ch.writeAndFlush(response);
                 }
+            }
+        }
+
+        if (MessageType.FINISH2.getValue() == message.getType()) {
+            if (finish2.incrementAndGet() == TOTAL_SERVICES_COUNT) {
+                log.info("all finish");
+                ServerService.flushResult2();
+                uploadData();
             }
         }
     }

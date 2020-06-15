@@ -2,7 +2,6 @@ package com.alirace.server;
 
 import com.alibaba.fastjson.JSON;
 import com.alirace.controller.CommonController;
-import com.alirace.model.Record;
 import com.alirace.model.TraceLog;
 import com.alirace.netty.MyDecoder;
 import com.alirace.netty.MyEncoder;
@@ -21,10 +20,9 @@ import okhttp3.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -40,6 +38,7 @@ public class ServerService implements Runnable {
     // 用来存放待合并的数据 traceId -> record
     private static final int MAX_HASHMAP_SIZE = 1024 * 16;
     public static ConcurrentHashMap<String, byte[]> mergeMap = new ConcurrentHashMap(MAX_HASHMAP_SIZE);
+    public static ConcurrentHashMap<String, ByteBuf> mergeMap2 = new ConcurrentHashMap<>(MAX_HASHMAP_SIZE);
 
     // 用来存放剩下的数据 traceId -> md5
     public static ConcurrentHashMap<String, String> resultMap = new ConcurrentHashMap(MAX_HASHMAP_SIZE);
@@ -62,7 +61,7 @@ public class ServerService implements Runnable {
         Thread thread = new Thread(new ServerService(), "ServerService");
         thread.start();
 
-        TimeUnit.SECONDS.sleep(30L);
+        TimeUnit.SECONDS.sleep(60L);
         uploadData();
     }
 
@@ -137,6 +136,53 @@ public class ServerService implements Runnable {
 //        }
         resultMap.put(traceId, md5);
         mergeMap.remove(traceId);
+    }
+
+    // 结果转移 + 刷盘
+    public static void flushResult2() {
+
+        Iterator<Map.Entry<String, ByteBuf>> iterator = mergeMap2.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<String, ByteBuf> entry = iterator.next();
+            String traceId = entry.getKey();
+            ByteBuf byteBuf = entry.getValue();
+            // log.info(key + " " + new String(byteBuf.array()));
+            String[] split = new String(byteBuf.array()).split("\n");
+            List<String> list = new ArrayList<>();
+            for (int i = 0; i < split.length; i++) {
+                if (split[i] != null && (int) split[i].charAt(0) != 0 && split[i].length() > 16) {
+                    list.add(split[i]);
+                    // log.info(split[i]);
+                }
+            }
+            Collections.sort(list, new Comparator<String>() {
+                @Override
+                public int compare(String o1, String o2) {
+                    return (int) (TraceLog.getTime(o1) - TraceLog.getTime(o2));
+                }
+            });
+
+            int length = 0;
+            for (int i = 0; i < list.size(); i++) {
+                length += list.get(i).length() + 1;
+            }
+            byte[] body = new byte[length];
+            int pos = 0;
+            for (int i = 0; i < list.size(); i++) {
+                String tmp = list.get(i);
+                for (int j = 0; j < tmp.length(); j++) {
+                    body[pos] = (byte) (int) tmp.charAt(i);
+                    pos++;
+                }
+                body[pos++] = (byte) (int) '\n';
+            }
+
+            String md5 = MD5Util.byteToMD5(body);
+            log.info(String.format("TraceId: %16s, MD5: %32s", traceId, md5));
+            resultMap.put(traceId, md5);
+            iterator.remove();
+        }
+        log.info("finish 2");
     }
 
     // 结果转移 + 刷盘

@@ -299,10 +299,11 @@ public class ClientService extends Thread {
 
         if (offset[lineId][0] == 1L) {
             byte[] body = new byte[nowOffset - preOffset + 1];
-            for (int i = preOffset; i < nowOffset; i++) {
+            for (int i = preOffset; i <= nowOffset; i++) {
                 body[i - preOffset] = bytes[i];
             }
-            log.info(new String(body));
+            // log.info(new String(body));
+            pass(body);
         }
         // 最后一个符号是 \n
         nowOffset++;
