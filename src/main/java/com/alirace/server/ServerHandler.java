@@ -57,19 +57,21 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
             // log.info(traceId.toString());
 
             // 向其他机器广播查询请求
-            for (Channel ch : group) {
-                if (ch != channel) {
-                    queryRequestCount.incrementAndGet();
-                    Message query = new Message(MessageType.QUERY.getValue(), traceId.toString().getBytes());
-                    ch.writeAndFlush(query);
-                }
-            }
+//            for (Channel ch : group) {
+//                if (ch != channel) {
+//                    queryRequestCount.incrementAndGet();
+//                    Message query = new Message(MessageType.QUERY.getValue(), traceId.toString().getBytes());
+//                    ch.writeAndFlush(query);
+//                }
+//            }
 
+            // log.info(new String(body));
             // 如果当前内存中不包含 traceId 的调用链路就放入内存, 如果存在的话就合并调用链, 然后刷盘
             byte[] result = mergeMap.putIfAbsent(traceId.toString(), body);
-//            if (result != null) {
-//                ServerService.flushResult(traceId.toString(), body, result);
-//            }
+
+            if (result != null) {
+                ServerService.flushResult(traceId.toString(), body, result);
+            }
             return;
         }
 

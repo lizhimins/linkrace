@@ -25,6 +25,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class ServerService implements Runnable {
@@ -50,13 +51,16 @@ public class ServerService implements Runnable {
     // 监听的端口号
     private static int PORT = 8003;
 
-    public static void start() {
+    public static void start() throws InterruptedException {
         log.info("Server initializing start...");
         // 状态监控服务
         ServerMonitor.start();
 
         Thread thread = new Thread(new ServerService(), "ServerService");
         thread.start();
+
+        TimeUnit.SECONDS.sleep(30L);
+        uploadData();
     }
 
     public static void startNetty() throws Exception {

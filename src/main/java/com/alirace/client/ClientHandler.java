@@ -27,7 +27,7 @@ public class ClientHandler extends SimpleChannelInboundHandler<Object> {
 
         // 如果收到查询请求
         if (MessageType.QUERY.getValue() == message.getType()) {
-            ClientService.services.get(0).queryAndResponse(message.getBody());
+            // ClientService.services.get(0).queryAndResponse(message.getBody());
             return;
         }
 

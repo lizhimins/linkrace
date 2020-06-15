@@ -53,14 +53,8 @@ public class ClientService extends Thread {
 
     // 常量
     private static final byte LOG_SEPARATOR = (byte) '|';
-    private static final byte CR_SEPARATOR = (byte) '\r';
-    private static final byte MINUS_SEPARATOR = (byte) '-';
     private static final byte LINE_SEPARATOR = (byte) '\n';
-    private static final byte C_SEPARATOR = (byte) 'C';
-    private static final byte[] HTTP_STATUS_CODE = "http.status_code=200".getBytes();
-    private static final byte[] ERROR_EQUAL_1 = "error=1".getBytes();
-//    private static final int LENGTH_PER_READ = 1024 * 1024; // 每一次读 1M 2.8秒
-    private static final int LENGTH_PER_READ =  8192; // 每一次读 1M 2.8秒
+    private static final int LENGTH_PER_READ = 1024 * 1024; // 每一次读 1M 2.8秒
 
     // 控制偏移量
     protected long startOffset = -1L;
@@ -241,7 +235,7 @@ public class ClientService extends Thread {
             int maxOffset = (int) val;
             int length = (int) offset[high][0];
             if (maxOffset == length) {
-                // queryAndUpload(high);
+                queryAndUpload(high);
                 // log.info("equal: " + high + " " + maxOffset + " " + length + " " + offset[high][length]);
             }
             // log.info(high + " " + maxOffset + " " + length + " " + offset[high][length] + " " + val);
@@ -258,11 +252,12 @@ public class ClientService extends Thread {
     // BIO 读取数据
     public void pullData() throws Exception {
         HttpURLConnection httpConnection = (HttpURLConnection) url.openConnection(Proxy.NO_PROXY);
-        long start = startOffset != 0 ? startOffset - 3000_0000 : startOffset;
-        long finish = startOffset == 0 ? finishOffset + 3000_0000 : finishOffset;
-        long total = finish - start;
-        long deal = 0;
-        log.info(String.format("Start receive file: %10d-%10d, Data path: %s", start, finish, path));
+//        long start = startOffset != 0 ? startOffset - 3000_0000 : startOffset;
+//        long finish = startOffset == 0 ? finishOffset + 3000_0000 : finishOffset;
+//        long total = finish - start;
+//        long deal = 0;
+//        log.info(String.format("Start receive file: %10d-%10d, Data path: %s", start, finish, path));
+        log.info(String.format("Start receive file: %10d-%10d, Data path: %s", startOffset, finishOffset, path));
         String range = String.format("bytes=%d-%d", startOffset, finishOffset);
         httpConnection.setRequestProperty("range", range);
         InputStream input = httpConnection.getInputStream();
@@ -345,9 +340,9 @@ public class ClientService extends Thread {
                 long value = offset[lineId][i];
                 int start = (int) (value >> 32);
                 int end = (int) value;
-                length += end - start;
+                length += end - start + 1;
             }
-            ByteBuf body = Unpooled.buffer(length);
+            ByteBuf body = Unpooled.buffer(length, length);
             for (int i = 1; i <= low; i++) {
                 long value = offset[lineId][i];
                 int start = (int) (value >> 32);
@@ -516,25 +511,7 @@ public class ClientService extends Thread {
     public void run() {
         try {
             pullData();
-//            for (int i = 0; i < 100; i++) {
-//                for (int j = 0; j < 36; j++) {
-//                    long value = offset[i][j];
-//                    int high = (int) (value >> 32);
-//                    int low = (int) value;
-//                    System.out.print(String.format("%d-%d ", high, low));
-//                }
-//                System.out.println();
-//            }
-//
-//            FileWriter fileWriter = null;
-//            try {
-//                fileWriter = new FileWriter("/root/1.data");
-//                fileWriter.write(sb.toString());
-//                fileWriter.flush();
-//                fileWriter.close();
-//            } catch (IOException e) {
-//                e.printStackTrace();
-//            }
+            
         } catch (Exception e) {
             e.printStackTrace();
         }

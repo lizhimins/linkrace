@@ -36,17 +36,19 @@ public class CommonController {
 
     private static String getPath() {
         String port = Application.getSystemPort();
-        if (CLIENT_PROCESS_PORT1.equals(port)) {
-            // return "http://localhost:" + CommonController.getDataSourcePort() + "/trace1.data";
-            // return "http://localhost:" + "8004" + "/trace1.data";
-            if (System.getProperty("local") != null) {
+        if (System.getProperty("local") != null) {
+            if (CLIENT_PROCESS_PORT1.equals(port)) {
                 return "http://10.66.1.107:" + "8004" + "/trace1.data";
             }
-            return "http://localhost:" + "8004" + "/trace1.data";
+            if (CLIENT_PROCESS_PORT2.equals(port)) {
+                return "http://10.66.1.107:" + "8004" + "/trace2.data";
+            }
+        }
+        if (CLIENT_PROCESS_PORT1.equals(port)) {
+            return "http://localhost:" + CommonController.getDataSourcePort() + "/trace1.data";
         }
         if (CLIENT_PROCESS_PORT2.equals(port)) {
-            // return "http://localhost:" + CommonController.getDataSourcePort() + "/trace2.data";
-            return "http://localhost:" + "8004" + "/trace2.data";
+            return "http://localhost:" + CommonController.getDataSourcePort() + "/trace2.data";
         }
         return null;
     }

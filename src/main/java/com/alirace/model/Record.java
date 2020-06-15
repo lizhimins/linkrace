@@ -72,34 +72,6 @@ public class Record {
 //        }
     }
 
-    public void checkAndUpload(long endOffset) throws IOException {
-        // System.out.println(endOffset);
-        if (end[index] == endOffset) {
-            isDone = true;
-            byte[] bytes = ClientService.services.get(threadId).bytes;
-            if (isError && isUpload.compareAndSet(false, true)) {
-                // 计算长度
-                int length = 0;
-                for (int i = 0; i <= index; i++) {
-                    length += end[i] - start[i] + 1;
-                }
-                ByteBuf buffer = Unpooled.buffer(length);
-                for (int i = 0; i <= index; i++) {
-                    buffer.writeBytes(bytes, start[i], end[i] - start[i] + 1);
-                }
-                // System.out.println(new String(buffer.array(), StandardCharsets.UTF_8));
-                ClientService.upload(buffer.array());
-                buffer.release();
-            } else {
-                ByteBuf buffer = Unpooled.buffer(16);
-                buffer.writeBytes(bytes, start[0], 16);
-                // System.out.println(new String(buffer.array(), StandardCharsets.UTF_8));
-                ClientService.pass(buffer.array());
-                buffer.release();
-            }
-        }
-    }
-
     public int getHashCode() {
         return hashCode;
     }
