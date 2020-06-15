@@ -9,7 +9,8 @@ public enum MessageType {
     UPLOAD((byte) 0x00), // 主动上传
     PASS((byte) 0x01), // 数据正确
     RESPONSE((byte) 0x09), // 查询响应
-    FINISH((byte) 0x0F),
+    FINISH1((byte) 0x0E),
+    FINISH2((byte) 0x0F),
 
     // 客户端<-服务端
     READY((byte) 0x10), // 广播 ready 信号

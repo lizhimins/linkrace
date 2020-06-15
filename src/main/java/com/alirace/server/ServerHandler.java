@@ -12,6 +12,9 @@ import io.netty.util.concurrent.GlobalEventExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Iterator;
+import java.util.Map;
+
 import static com.alirace.server.ServerService.*;
 
 /**
@@ -77,30 +80,24 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
 
         if (MessageType.RESPONSE.getValue() == message.getType()) {
             queryResponseCount.incrementAndGet();
-//            byte[] body = message.getBody();
-//            StringBuffer traceId = new StringBuffer(20);
-//            for (int i = 0; i < 20; i++) {
-//                if (body[i] == (byte) '|') {
-//                    break;
-//                }
-//                traceId.append((char) (int) body[i]);
-//            }
-//            byte[] result = mergeMap.get(traceId.toString());
-//            if (result != null) {
-//                ServerService.flushResult(traceId.toString(), body, result);
-//            }
         }
 
-//        // 如果日志流已经上报完, 只等数据回查的话
-//        if (MessageType.FINISH.getValue() == message.getType()) {
-//            if (doneServicesCount.incrementAndGet() == TOTAL_SERVICES_COUNT) {
-//                // 广播结束信号
-//                for (Channel ch : group) {
-//                    Message query = new Message(MessageType.NO_MORE_UPLOAD.getValue(), "EOF".getBytes());
-//                    ch.writeAndFlush(query);
-//                }
-//            }
-//        }
+        // 如果日志流已经上报完, 只等数据回查的话
+        if (MessageType.FINISH1.getValue() == message.getType()) {
+            if (finish1.incrementAndGet() == TOTAL_SERVICES_COUNT) {
+                int size = mergeMap.size();
+                StringBuffer sb = new StringBuffer();
+                Iterator<Map.Entry<String, byte[]>> iterator = mergeMap.entrySet().iterator();
+                while (iterator.hasNext()) {
+                    sb.append(iterator.next().getKey() + ",");
+                }
+                log.info("Broadcast: " + sb.toString());
+                Message response = new Message(MessageType.FINISH1.getValue(), sb.toString().getBytes());
+                for (Channel ch : group) {
+                    ch.writeAndFlush(response);
+                }
+            }
+        }
     }
 
     @Override

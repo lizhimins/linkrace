@@ -71,12 +71,12 @@ public class ClientService extends Thread {
     // 找到对应的行号, 低 32 字节保存 hashcode, 高 32 字节保存行号
     private static final int BUCKETS_NUM = 0x01 << 20; // 100万
     private static final int TRACE_ID_HASH_CODE_AND_LINE_NUM = 16; // 每行32
-    private static AtomicInteger lineIndex = new AtomicInteger(-1);
+    public static AtomicInteger lineIndex = new AtomicInteger(-1);
     private static int[] bucketElements = new int[BUCKETS_NUM];
     private static long[][] buckets = new long[BUCKETS_NUM][16];
 
     // 行结构
-    private static long[][] offset;
+    public static long[][] offset;
 
     // 滑动窗口, 大小配置为 2万
     private static final int WINDOW_SIZE = 20000;
@@ -87,15 +87,105 @@ public class ClientService extends Thread {
     private int bucketIndex = 0;
     private int hash = 0;
 
-    private StringBuffer sb = new StringBuffer();
 
     // 构造函数
     public ClientService(String name) {
         super(name);
-        bytes = new byte[BYTES_LENGTH + 2 * LENGTH_PER_READ];
+        bytes = new byte[BYTES_LENGTH + 4 * LENGTH_PER_READ];
         for (int i = 0; i < WINDOW_SIZE; i++) {
             window[i] = -1L; // 0x11111111
         }
+    }
+
+    public static int calLineIndex(String traceId) {
+        int bucket = 0; byte b;
+        for (int i = 0; i < 5; i++) {
+            b = (byte) (int) traceId.charAt(i);
+            if ('0' <= b && b <= '9') {
+                bucket = bucket * 16 + ((int) b - '0');
+            } else {
+                bucket = bucket * 16 + ((int) b - 'a') + 10;
+            }
+        }
+
+        int hash = 0;
+        for (int i = 5; i < 13; i++) {
+            b = (byte) (int) traceId.charAt(i);
+            if ('0' <= b && b <= '9') {
+                hash = hash * 16 + ((int) b - '0');
+            } else {
+                hash = hash * 16 + ((int) b - 'a') + 10;
+            }
+        }
+
+        int elements = bucketElements[bucket];
+        for (int j = 0; j < elements; j++) {
+            long value = buckets[bucket][j];
+            if (hash == (int) value) {
+                // log.info(String.format("bucketIndex: %6d, hashCode: %6d, ele: %6d", bucket, hash, elements));
+                return (int) (value >> 32);
+            }
+        }
+        return -1;
+    }
+
+    // 临时方案
+    public void finish2() throws Exception {
+        HttpURLConnection httpConnection = (HttpURLConnection) url.openConnection(Proxy.NO_PROXY);
+        log.info(String.format("Start receive file: %10d-%10d, Data path: %s", startOffset, finishOffset, path));
+        String range = String.format("bytes=%d-%d", startOffset, finishOffset);
+        httpConnection.setRequestProperty("range", range);
+        InputStream input = httpConnection.getInputStream();
+
+        // 初始化左右指针, 空出第一小段数据以备复制
+        preOffset = LENGTH_PER_READ;
+        nowOffset = LENGTH_PER_READ;
+        logOffset = LENGTH_PER_READ;
+
+        // 读入一小段数据
+        int readByteCount = input.read(bytes, logOffset, LENGTH_PER_READ);
+        logOffset += readByteCount;
+
+        while (true) {
+            // 读入一小段数据
+            readByteCount = input.read(bytes, logOffset, LENGTH_PER_READ);
+
+            // 文件结束退出
+            if (readByteCount == -1) {
+                while (nowOffset < logOffset) {
+                    scanData2();
+                }
+                break;
+            }
+
+            // 日志坐标右移
+            logOffset += readByteCount;
+
+            // 如果不是处理第一段数据的线程, 就会有半包问题, 这时候跳过最前面的半条日志
+            if (startOffset != 0) {
+                while (bytes[nowOffset] != LINE_SEPARATOR) {
+                    nowOffset++;
+                }
+                nowOffset++;
+            }
+
+            // 循环处理所有数据
+            while (nowOffset + LENGTH_PER_READ < logOffset) {
+                scanData2();
+            }
+
+            // 如果太长了要从头开始写
+            if (nowOffset >= BYTES_LENGTH + LENGTH_PER_READ) {
+                // 拷贝末尾的数据
+                for (int i = nowOffset; i <= logOffset; i++) {
+                    bytes[i - BYTES_LENGTH] = bytes[i];
+                }
+                nowOffset -= BYTES_LENGTH;
+                logOffset -= BYTES_LENGTH;
+                // log.info("rewrite");
+            }
+        }
+        log.info("Client pull data finish...");
     }
 
     // 获得所在行的编号, 注意该方法会自动推进 nowOffset
@@ -187,6 +277,35 @@ public class ClientService extends Thread {
             return true;
         }
         return false;
+    }
+
+    public void scanData2() throws Exception {
+        preOffset = nowOffset;
+
+        // traceId
+        int lineId = queryLineIndex();
+
+        while (bytes[nowOffset] != LOG_SEPARATOR) {
+            nowOffset++;
+        }
+
+        // 处理时间戳, spanId
+        nowOffset += 70;
+
+        // 处理到末尾
+        while (bytes[nowOffset] != LINE_SEPARATOR) {
+            nowOffset++;
+        }
+
+        if (offset[lineId][0] == 1L) {
+            byte[] body = new byte[nowOffset - preOffset + 1];
+            for (int i = preOffset; i < nowOffset; i++) {
+                body[i - preOffset] = bytes[i];
+            }
+            log.info(new String(body));
+        }
+        // 最后一个符号是 \n
+        nowOffset++;
     }
 
     public void scanData() throws Exception {
@@ -302,7 +421,7 @@ public class ClientService extends Thread {
             // 如果太长了要从头开始写
             if (nowOffset >= BYTES_LENGTH + LENGTH_PER_READ) {
                 // 拷贝末尾的数据
-                for (int i = nowOffset; i < logOffset; i++) {
+                for (int i = nowOffset; i <= logOffset; i++) {
                     bytes[i - BYTES_LENGTH] = bytes[i];
                 }
                 nowOffset -= BYTES_LENGTH;
@@ -451,6 +570,18 @@ public class ClientService extends Thread {
         future.channel().writeAndFlush(message);
     }
 
+    public void callFinish1() {
+        byte[] body = "finish".getBytes();
+        Message message = new Message(MessageType.FINISH1.getValue(), body);
+        future.channel().writeAndFlush(message);
+    }
+
+    public void callFinish2() {
+        byte[] body = "finish".getBytes();
+        Message message = new Message(MessageType.FINISH2.getValue(), body);
+        future.channel().writeAndFlush(message);
+    }
+
     public static void setOffsetAndRun(long length) {
         long blockSize = length / nThreads;
         log.info(HttpHeaderNames.CONTENT_LENGTH.toString() + ": " + length + ", " + blockSize);
@@ -511,7 +642,7 @@ public class ClientService extends Thread {
     public void run() {
         try {
             pullData();
-            
+            callFinish1();
         } catch (Exception e) {
             e.printStackTrace();
         }
