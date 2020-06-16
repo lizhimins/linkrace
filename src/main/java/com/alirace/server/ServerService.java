@@ -61,7 +61,7 @@ public class ServerService implements Runnable {
         Thread thread = new Thread(new ServerService(), "ServerService");
         thread.start();
 
-        TimeUnit.SECONDS.sleep(60L);
+        TimeUnit.SECONDS.sleep(30);
         uploadData();
     }
 

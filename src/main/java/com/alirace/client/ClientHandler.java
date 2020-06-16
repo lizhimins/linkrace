@@ -31,8 +31,12 @@ public class ClientHandler extends SimpleChannelInboundHandler<Object> {
             return;
         }
 
-        // 如果收到查询请求
-        if (MessageType.FINISH1.getValue() == message.getType()) {
+//        // 如果收到查询请求
+//        f (MessageType.FINISH1.getValue() == message.getType()) {
+////
+////        }
+
+        if (MessageType.WAIT.getValue() == message.getType()) {
 
         }
 

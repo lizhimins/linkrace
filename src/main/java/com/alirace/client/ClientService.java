@@ -61,7 +61,7 @@ public class ClientService extends Thread {
     private int nowOffset = 0; // 当前偏移
     private int logOffset = 0; // 日志偏移 右指针
 
-    private static final int BYTES_LENGTH = 512 * 1024 * 1024;
+    private static final int BYTES_LENGTH = 1024 * 1024 * 1024;
     private byte[] bytes;
 
     // HashMap, 低 32 字节保存 hashcode, 高 32 字节保存行号, 单例
@@ -358,7 +358,7 @@ public class ClientService extends Thread {
             offsetStatus[lineId] |= (0x1L) << 32; // 标记为错误
         } else {
             // log.info(new String(traceId) + " existent");
-            tryResponse(lineId);
+            tryResponse(traceId, lineId);
         }
 
 //        log.info(new String(traceId) + " "
@@ -367,7 +367,7 @@ public class ClientService extends Thread {
     }
 
     // 查询
-    public void tryResponse(int lineId) {
+    public void tryResponse(byte[] traceId, int lineId) {
         // 获得这一行最新的状态 0x1 错误 0x10000 表示结束
         int status = (int) (offsetStatus[lineId] >> 32);
         int total = (int) (offsetStatus[lineId]); // 数据条数
@@ -381,12 +381,18 @@ public class ClientService extends Thread {
                 length += (int) spanOffset - (int) (spanOffset >> 32) + 1;
             }
 
+            boolean isComplete = true;
             int index = 0;
             byte[] body = new byte[length];
             for (int i = 0; i < total; i++) {
                 long spanOffset = offset[lineId][i];
                 int start = (int) (spanOffset >> 32);
                 int finish = (int) spanOffset;
+                for (int j = 0; j < 12; j++) {
+                    if (traceId[j] != bytes[start + j]) {
+                        isComplete = false; break;
+                    }
+                }
                 for (int j = start; j <= finish; j++) {
                     body[index] = bytes[j];
                     index++;
@@ -394,7 +400,12 @@ public class ClientService extends Thread {
             }
 
             // TODO: 校验数据, 校验不通过直接丢弃
-            response(body);
+            if (isComplete) {
+                response(body);
+            } else {
+                response("ERROR".getBytes());
+                log.info(new String(body));
+            }
             // log.info(new String(body));
             return;
         }
