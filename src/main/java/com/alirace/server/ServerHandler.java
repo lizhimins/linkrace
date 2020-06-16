@@ -39,8 +39,8 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
 
         if (MessageType.PASS.getValue() == message.getType()) {
             byte[] body = message.getBody();
-            StringBuffer buffer = new StringBuffer(20);
-            for (int i = 0; i < 20; i++) {
+            StringBuffer buffer = new StringBuffer(16);
+            for (int i = 0; i < 16; i++) {
                 if (body[i] == (byte) '|') {
                     break;
                 }
@@ -58,33 +58,31 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
         // 如果是上传数据
         if (MessageType.UPLOAD.getValue() == message.getType()) {
             byte[] body = message.getBody();
-            StringBuffer sb = new StringBuffer(16);
+            StringBuffer buffer = new StringBuffer(16);
             for (int i = 0; i < 16; i++) {
                 if (body[i] == (byte) '|') {
                     break;
                 }
-                sb.append((char) (int) body[i]);
+                buffer.append((char) (int) body[i]);
             }
-            String traceId = sb.toString();
-            log.info(traceId);
+            String traceId = buffer.toString();
+            // log.info(traceId);
 
             // 向其他机器广播查询请求
-//            for (Channel ch : group) {
-//                if (ch != channel) {
-//                    queryRequestCount.incrementAndGet();
-//                    Message query = new Message(MessageType.QUERY.getValue(), traceId.toString().getBytes());
-//                    ch.writeAndFlush(query);
-//                }
-//            }
+            for (Channel ch : group) {
+                if (ch != channel) {
+                    queryRequestCount.incrementAndGet();
+                    Message query = new Message(MessageType.QUERY.getValue(), traceId.getBytes());
+                    ch.writeAndFlush(query);
+                }
+            }
 
-            // log.info(new String(body));
             // 如果当前内存中不包含 traceId 的调用链路就放入内存, 如果存在的话就合并调用链, 然后刷盘
-//            byte[] result = mergeMap.putIfAbsent(traceId.toString(), body);
-//
-//            if (result != null) {
-//                ServerService.flushResult(traceId.toString(), body, result);
-//            }
-//            return;
+            byte[] result = mergeMap.putIfAbsent(traceId, body);
+            if (result != null) {
+                ServerService.flushResult(traceId, body, result);
+            }
+            return;
         }
 
         if (MessageType.RESPONSE.getValue() == message.getType()) {

@@ -135,7 +135,7 @@ public class ClientService extends Thread {
 
         // 没有出现过就新建行
         int line = maxLineIndex.incrementAndGet();
-        buckets[bucketIndex][depth] = ((long) hash & 0xFFFFFFFFL) | (((long) line << 32) & 0xFFFFFFFF00000000L);
+        buckets[bucketIndex][depth] = NumberUtil.combineInt2Long(line, hash);
         bucketStatus[bucketIndex]++;
         return line;
     }
@@ -180,19 +180,19 @@ public class ClientService extends Thread {
         }
         // log.info(preOffset + "-" + nowOffset);
 
-        // 保存到同一个 long 上
-        // offset 数组的第一个格子, 高位保存状态, 低位保存数据条数
-        offsetStatus[nowLine]++;
-
         // 检查错误
         if (checkTags()) {
             errorCount.incrementAndGet(); // 错误数量 + 1
-            offsetStatus[nowLine] |= (0x1L << 32);
+            offsetStatus[nowLine] |= (0x1L << 32); // 错误打标
         }
 
         long status = offsetStatus[nowLine];
         offset[nowLine][(int) status] = NumberUtil.combineInt2Long(preOffset, nowOffset);
         // log.info(lineId + "|" + spanNum + "|" + tmp + "|" + offset[lineId][0]);
+
+        // 保存到同一个 long 上
+        // offset 数组的第一个格子, 高位保存状态, 低位保存数据条数
+        offsetStatus[nowLine]++;
 
         // 滑动窗口
         long data = window[windowIndex];
@@ -293,20 +293,114 @@ public class ClientService extends Thread {
             offsetStatus[lineId] |= (0x1L << 48); // 标记上传过了
 
             int length = 0;
-            for (int i = 0; i <= total; i++) {
+            for (int i = 0; i < total; i++) {
                 long spanOffset = offset[lineId][i];
                 length += (int) spanOffset - (int) (spanOffset >> 32) + 1;
             }
 
-            ByteBuf body = Unpooled.buffer(length, length);
-            for (int i = 0; i <= total; i++) {
+            int index = 0;
+            byte[] body = new byte[length];
+            for (int i = 0; i < total; i++) {
                 long spanOffset = offset[lineId][i];
-                body.writeBytes(bytes, (int) (spanOffset >> 32), (int) spanOffset - (int) (spanOffset >> 32) + 1);
+                int start = (int) (spanOffset >> 32);
+                int finish = (int) spanOffset;
+                for (int j = start; j <= finish; j++) {
+                    body[index] = bytes[j];
+                    index++;
+                }
             }
-            upload(body.array());
-            // log.info(new String(body.array()));
-            body.release();
+            upload(body);
+            // log.info(new String(body));
         }
+    }
+
+    public static void queryOrSetFlag(byte[] traceId) {
+        services[0].queryAndSetFlag(traceId);
+    }
+
+    public void queryAndSetFlag(byte[] traceId) {
+        // 根据前几位计算桶的编号
+        int bucketIndex = 0;
+        for (int i = 0; i < 5; i++) {
+            byte b = traceId[i];
+            if ('0' <= b && b <= '9') {
+                bucketIndex = bucketIndex * 16 + ((int) b - '0');
+            } else {
+                bucketIndex = bucketIndex * 16 + ((int) b - 'a') + 10;
+            }
+        }
+
+        int hash = 0;
+        for (int i = 5; i < 13; i++) {
+            byte b = traceId[i];
+            if ('0' <= b && b <= '9') {
+                hash = hash * 16 + ((int) b - '0');
+            } else {
+                hash = hash * 16 + ((int) b - 'a') + 10;
+            }
+        }
+
+        // 检测是否已经出现过
+        int lineId = -1;
+        int depth = bucketStatus[bucketIndex];
+        for (int i = 0; i < depth; i++) {
+            long value = buckets[bucketIndex][i];
+            if (hash == (int) value) {
+                lineId = (int) (value >> 32);
+            }
+        }
+
+        if (lineId == -1) {
+            // log.info(new String(traceId) + " non-existent");
+            lineId = maxLineIndex.incrementAndGet(); // 新行
+            buckets[bucketIndex][depth] = NumberUtil.combineInt2Long(lineId, hash); // 保存 traceId
+            bucketStatus[bucketIndex]++; // hash 数量+1
+            offsetStatus[lineId] |= (0x1L) << 32; // 标记为错误
+        } else {
+            // log.info(new String(traceId) + " existent");
+            tryResponse(lineId);
+        }
+
+//        log.info(new String(traceId) + " "
+//                + String.format("bucketIndex: %6d, hashCode: %6d", bucketIndex, hash)
+//                + String.format(" %s", " " + lineId));
+    }
+
+    // 查询
+    public void tryResponse(int lineId) {
+        // 获得这一行最新的状态 0x1 错误 0x10000 表示结束
+        int status = (int) (offsetStatus[lineId] >> 32);
+        int total = (int) (offsetStatus[lineId]); // 数据条数
+        // log.info(String.format("%h", status));
+
+        // 结束但没有上传
+        if (status == 0) {
+            int length = 0;
+            for (int i = 0; i < total; i++) {
+                long spanOffset = offset[lineId][i];
+                length += (int) spanOffset - (int) (spanOffset >> 32) + 1;
+            }
+
+            int index = 0;
+            byte[] body = new byte[length];
+            for (int i = 0; i < total; i++) {
+                long spanOffset = offset[lineId][i];
+                int start = (int) (spanOffset >> 32);
+                int finish = (int) spanOffset;
+                for (int j = start; j <= finish; j++) {
+                    body[index] = bytes[j];
+                    index++;
+                }
+            }
+
+            // TODO: 校验数据, 校验不通过直接丢弃
+            response(body);
+            // log.info(new String(body));
+            return;
+        }
+
+        // 还没结束的话只需要标记一下有错误就可以了
+        offsetStatus[lineId] |= (0x1L) << 32; // 标记为错误
     }
 
     // 上传调用链
@@ -318,6 +412,7 @@ public class ClientService extends Thread {
 
     // 查询响应
     public static void response(byte[] body) {
+        responseCount.incrementAndGet();
         Message message = new Message(MessageType.RESPONSE.getValue(), body);
         future.channel().writeAndFlush(message);
     }

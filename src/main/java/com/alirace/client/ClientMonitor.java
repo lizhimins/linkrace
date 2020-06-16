@@ -27,11 +27,10 @@ public class ClientMonitor implements Runnable {
 
     private void printStatus() {
         StringBuffer sb = new StringBuffer();
-        sb.append(String.format("error: %8s, ", errorCount.get()));
-        sb.append(String.format("pass: %8s, ", passCount.get()));
-        sb.append(String.format("upload: %5s, ", uploadCount.get()));
-        sb.append(String.format("query: %5s, ", queryCount.get()));
-        sb.append(String.format("response: %5s, ", responseCount.get()));
+        sb.append(String.format("ERROR: %8s, ", errorCount.get()));
+        sb.append(String.format("UPLOAD: %5s, ", uploadCount.get()));
+        sb.append(String.format("QUERY: %5s, ", queryCount.get()));
+        sb.append(String.format("RESP: %5s, ", responseCount.get()));
         log.info(sb.toString());
     }
 
