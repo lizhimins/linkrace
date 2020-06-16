@@ -37,7 +37,8 @@ public class ClientHandler extends SimpleChannelInboundHandler<Object> {
 ////        }
 
         if (MessageType.WAIT.getValue() == message.getType()) {
-
+            int other = Integer.parseInt(new String(message.getBody()));
+            ClientService.setWait(other);
         }
 
         // 如果收到开始信号请求

@@ -87,10 +87,22 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
 
         if (MessageType.RESPONSE.getValue() == message.getType()) {
             queryResponseCount.incrementAndGet();
-            if ("ERROR".equals(new String(message.getBody()))) {
-                log.info("ERROR");
-            } else {
-                log.info("YES");
+            byte[] body = message.getBody();
+            // 空数据直接退出
+            if (body[0] == '\n') {
+                return;
+            }
+            StringBuffer buffer = new StringBuffer(16);
+            for (int i = 0; i < 16; i++) {
+                if (body[i] == (byte) '|') {
+                    break;
+                }
+                buffer.append((char) (int) body[i]);
+            }
+            String traceId = buffer.toString();
+            byte[] result = mergeMap.get(traceId);
+            if (result != null) {
+                ServerService.flushResult(traceId, body, result);
             }
         }
 

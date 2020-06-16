@@ -61,7 +61,7 @@ public class ServerService implements Runnable {
         Thread thread = new Thread(new ServerService(), "ServerService");
         thread.start();
 
-        TimeUnit.SECONDS.sleep(30);
+        TimeUnit.SECONDS.sleep(10);
         uploadData();
     }
 
@@ -127,7 +127,7 @@ public class ServerService implements Runnable {
 //        }
 
         String md5 = MD5Util.byteToMD5(body);
-        log.info(String.format("TraceId: %16s, MD5: %32s", traceId, md5));
+        // log.info(String.format("TraceId: %16s, MD5: %32s", traceId, md5));
 //
 //        for (int i = 0; i < bytes.length; i++) {
 //            if (bytes[i] != body[i]) {

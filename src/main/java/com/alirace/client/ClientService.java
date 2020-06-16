@@ -57,11 +57,15 @@ public class ClientService extends Thread {
     private long startOffset = -1L;
     private long finishOffset = -1L;
 
+    // 机器同步算法, 防止快机太快
+    public int readBlockTimes = 0;
+    public int otherBlockTimes = 0;
+
     private int preOffset = 0; // 起始偏移 左指针
     private int nowOffset = 0; // 当前偏移
     private int logOffset = 0; // 日志偏移 右指针
 
-    private static final int BYTES_LENGTH = 1024 * 1024 * 1024;
+    private static final int BYTES_LENGTH = 512 * 1024 * 1024;
     private byte[] bytes;
 
     // HashMap, 低 32 字节保存 hashcode, 高 32 字节保存行号, 单例
@@ -212,6 +216,21 @@ public class ClientService extends Thread {
         nowOffset++;
     }
 
+    public void syncBlock() throws InterruptedException {
+        readBlockTimes++;
+        while (readBlockTimes - otherBlockTimes > 128) {
+            TimeUnit.MILLISECONDS.sleep(10);
+        }
+        // log.info(String.format("SEND SYNC: %d", readBlockTimes));
+        Message message = new Message(MessageType.WAIT.getValue(), String.valueOf(readBlockTimes).getBytes());
+        future.channel().writeAndFlush(message);
+    }
+
+    public static void setWait(int other) {
+        services[0].otherBlockTimes = other;
+        // log.info(String.format("SELF: %d OTHER: %d", services[0].readBlockTimes, other));
+    }
+
     // BIO 读取数据
     public void pullData() throws Exception {
         HttpURLConnection httpConnection = (HttpURLConnection) url.openConnection(Proxy.NO_PROXY);
@@ -237,6 +256,7 @@ public class ClientService extends Thread {
         while (true) {
             // 读入一小段数据
             readByteCount = input.read(bytes, logOffset, LENGTH_PER_READ);
+            syncBlock();
 
             // 文件结束退出
             if (readByteCount == -1) {
@@ -289,7 +309,7 @@ public class ClientService extends Thread {
         // log.info(String.format("%h", status));
 
         // 有错误
-        if (status == 1) {
+        if (status != 0) {
             offsetStatus[lineId] |= (0x1L << 48); // 标记上传过了
 
             int length = 0;
@@ -309,8 +329,21 @@ public class ClientService extends Thread {
                     index++;
                 }
             }
-            upload(body);
+
+            if (status == 0x00010001) {
+                upload(body);
+            }
+
+            if (status == 0x00010100) {
+                response(body);
+            }
+
+            if (status == 0x00010101) {
+                upload(body);
+                response("\n".getBytes());
+            }
             // log.info(new String(body));
+            return;
         }
     }
 
@@ -355,7 +388,7 @@ public class ClientService extends Thread {
             lineId = maxLineIndex.incrementAndGet(); // 新行
             buckets[bucketIndex][depth] = NumberUtil.combineInt2Long(lineId, hash); // 保存 traceId
             bucketStatus[bucketIndex]++; // hash 数量+1
-            offsetStatus[lineId] |= (0x1L) << 32; // 标记为错误
+            offsetStatus[lineId] |= ((0x1L) << 40); // 标记为错误
         } else {
             // log.info(new String(traceId) + " existent");
             tryResponse(traceId, lineId);
@@ -403,15 +436,15 @@ public class ClientService extends Thread {
             if (isComplete) {
                 response(body);
             } else {
-                response("ERROR".getBytes());
-                log.info(new String(body));
+                response("\n".getBytes());
+                // log.info(new String(body));
             }
             // log.info(new String(body));
             return;
         }
 
         // 还没结束的话只需要标记一下有错误就可以了
-        offsetStatus[lineId] |= (0x1L) << 32; // 标记为错误
+        offsetStatus[lineId] |= ((0x1L) << 40); // 标记为第二种错误
     }
 
     // 上传调用链
