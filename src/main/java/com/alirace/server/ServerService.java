@@ -38,7 +38,6 @@ public class ServerService implements Runnable {
     // 用来存放待合并的数据 traceId -> record
     private static final int MAX_HASHMAP_SIZE = 1024 * 16;
     public static ConcurrentHashMap<String, byte[]> mergeMap = new ConcurrentHashMap(MAX_HASHMAP_SIZE);
-    public static ConcurrentHashMap<String, ByteBuf> mergeMap2 = new ConcurrentHashMap<>(MAX_HASHMAP_SIZE);
 
     // 用来存放剩下的数据 traceId -> md5
     public static ConcurrentHashMap<String, String> resultMap = new ConcurrentHashMap(MAX_HASHMAP_SIZE);
@@ -46,9 +45,6 @@ public class ServerService implements Runnable {
     // 发出的查询数量 和 收到的响应数量, 需要支持并发
     public static AtomicInteger queryRequestCount = new AtomicInteger(0);
     public static AtomicInteger queryResponseCount = new AtomicInteger(0);
-
-    public static AtomicInteger finish1 = new AtomicInteger(0);
-    public static AtomicInteger finish2 = new AtomicInteger(0);
 
     // 监听的端口号
     private static int PORT = 8003;
@@ -61,7 +57,7 @@ public class ServerService implements Runnable {
         Thread thread = new Thread(new ServerService(), "ServerService");
         thread.start();
 
-        TimeUnit.SECONDS.sleep(10);
+        TimeUnit.MILLISECONDS.sleep(8500);
         uploadData();
     }
 
@@ -139,53 +135,6 @@ public class ServerService implements Runnable {
     }
 
     // 结果转移 + 刷盘
-    public static void flushResult2() {
-
-        Iterator<Map.Entry<String, ByteBuf>> iterator = mergeMap2.entrySet().iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<String, ByteBuf> entry = iterator.next();
-            String traceId = entry.getKey();
-            ByteBuf byteBuf = entry.getValue();
-            // log.info(key + " " + new String(byteBuf.array()));
-            String[] split = new String(byteBuf.array()).split("\n");
-            List<String> list = new ArrayList<>();
-            for (int i = 0; i < split.length; i++) {
-                if (split[i] != null && (int) split[i].charAt(0) != 0 && split[i].length() > 16) {
-                    list.add(split[i]);
-                    // log.info(split[i]);
-                }
-            }
-            Collections.sort(list, new Comparator<String>() {
-                @Override
-                public int compare(String o1, String o2) {
-                    return (int) (TraceLog.getTime(o1) - TraceLog.getTime(o2));
-                }
-            });
-
-            int length = 0;
-            for (int i = 0; i < list.size(); i++) {
-                length += list.get(i).length() + 1;
-            }
-            byte[] body = new byte[length];
-            int pos = 0;
-            for (int i = 0; i < list.size(); i++) {
-                String tmp = list.get(i);
-                for (int j = 0; j < tmp.length(); j++) {
-                    body[pos] = (byte) (int) tmp.charAt(i);
-                    pos++;
-                }
-                body[pos++] = (byte) (int) '\n';
-            }
-
-            String md5 = MD5Util.byteToMD5(body);
-            log.info(String.format("TraceId: %16s, MD5: %32s", traceId, md5));
-            resultMap.put(traceId, md5);
-            iterator.remove();
-        }
-        log.info("finish 2");
-    }
-
-    // 结果转移 + 刷盘
     public static void flushResult(String traceId, byte[] bytes) {
         String[] spans = new String(bytes).split("\n");
 
@@ -225,6 +174,7 @@ public class ServerService implements Runnable {
         resultMap.put(traceId, md5);
         mergeMap.remove(traceId);
     }
+
     // http 调用上传接口
     public static void uploadData() {
         log.info("Server start upload data...");

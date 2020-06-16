@@ -10,14 +10,12 @@ public class ClientMonitor implements Runnable {
 
     private static final Logger log = LoggerFactory.getLogger(ClientMonitor.class);
 
-    public static AtomicLong uploadCount = new AtomicLong(0L);
-    public static AtomicLong passCount = new AtomicLong(0L);
-    // 接收到需要查询的 traceId 数量
-    public static AtomicLong queryCount = new AtomicLong(0L);
-    // 被动上报 traceId 数量, 也就是查询数量
-    public static AtomicLong responseCount = new AtomicLong(0L);
     // 错误总数
     public static AtomicLong errorCount = new AtomicLong(0L);
+    public static AtomicLong uploadCount = new AtomicLong(0L);
+    public static AtomicLong queryCount = new AtomicLong(0L);
+    public static AtomicLong responseCount = new AtomicLong(0L);
+    public static AtomicLong findCount = new AtomicLong(0L);
 
     public static void start() {
         log.info("MonitorService start...");
@@ -27,10 +25,11 @@ public class ClientMonitor implements Runnable {
 
     private void printStatus() {
         StringBuffer sb = new StringBuffer();
-        sb.append(String.format("ERROR: %8s, ", errorCount.get()));
-        sb.append(String.format("UPLOAD: %5s, ", uploadCount.get()));
-        sb.append(String.format("QUERY: %5s, ", queryCount.get()));
-        sb.append(String.format("RESP: %5s, ", responseCount.get()));
+        sb.append(String.format("ERROR: %6s, ", errorCount.get()));
+        sb.append(String.format("UPLOAD: %6s, ", uploadCount.get()));
+        sb.append(String.format("QUERY: %6s, ", queryCount.get()));
+        sb.append(String.format("FIND: %6s, ", findCount.get()));
+        sb.append(String.format("RESP: %6s, ", responseCount.get()));
         log.info(sb.toString());
     }
 
@@ -39,7 +38,7 @@ public class ClientMonitor implements Runnable {
         while (true) {
             try {
                 printStatus();
-                TimeUnit.MILLISECONDS.sleep(1000);
+                TimeUnit.MILLISECONDS.sleep(500);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }

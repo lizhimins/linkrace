@@ -37,24 +37,6 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
         Message message = (Message) obj;
         // log.info("Client->Server: " + channel.remoteAddress() + " " + message.toString());
 
-        if (MessageType.PASS.getValue() == message.getType()) {
-            byte[] body = message.getBody();
-            StringBuffer buffer = new StringBuffer(16);
-            for (int i = 0; i < 16; i++) {
-                if (body[i] == (byte) '|') {
-                    break;
-                }
-                buffer.append((char) (int) body[i]);
-            }
-            String traceId = buffer.toString();
-            ByteBuf byteBuf = mergeMap2.get(traceId);
-            if (byteBuf == null) {
-                byteBuf = Unpooled.buffer();
-                mergeMap2.put(traceId, byteBuf);
-            }
-            byteBuf.writeBytes(body);
-        }
-
         // 如果是上传数据
         if (MessageType.UPLOAD.getValue() == message.getType()) {
             byte[] body = message.getBody();
@@ -89,7 +71,8 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
             queryResponseCount.incrementAndGet();
             byte[] body = message.getBody();
             // 空数据直接退出
-            if (body[0] == '\n') {
+            if (body[0] == '\n' || body[0] == '\r') {
+                log.error("ERROR LOG...");
                 return;
             }
             StringBuffer buffer = new StringBuffer(16);

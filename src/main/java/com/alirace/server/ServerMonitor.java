@@ -13,11 +13,10 @@ public class ServerMonitor implements Runnable {
 
     public static void printStatus() {
         StringBuffer sb = new StringBuffer();
-        sb.append(String.format("MergeMap: %5d, ", mergeMap.size()));
-        sb.append(String.format("MergeMap2: %5d, ", mergeMap2.size()));
-        sb.append(String.format("Result: %5d, ", resultMap.size()));
-        sb.append(String.format("Request: %5d, ", queryRequestCount.get()));
-        sb.append(String.format("Response: %5d, ", queryResponseCount.get()));
+        sb.append(String.format("MERGE: %5d, ", mergeMap.size()));
+        sb.append(String.format("RESULT: %5d, ", resultMap.size()));
+        sb.append(String.format("REQ: %5d, ", queryRequestCount.get()));
+        sb.append(String.format("RSP: %5d, ", queryResponseCount.get()));
 //        sb.append(String.format("Total Yes: %5d ", CollectService.totalYes));
 //        CollectService.mergeMap.keySet().forEach(
 //                key -> sb.append(key + " ")

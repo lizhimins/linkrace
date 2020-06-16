@@ -310,8 +310,6 @@ public class ClientService extends Thread {
 
         // 有错误
         if (status != 0) {
-            offsetStatus[lineId] |= (0x1L << 48); // 标记上传过了
-
             int length = 0;
             for (int i = 0; i < total; i++) {
                 long spanOffset = offset[lineId][i];
@@ -330,18 +328,20 @@ public class ClientService extends Thread {
                 }
             }
 
-            if (status == 0x00010001) {
+            if (status == 0x00000001) {
                 upload(body);
             }
 
-            if (status == 0x00010100) {
+            if (status == 0x00000100) {
                 response(body);
             }
 
-            if (status == 0x00010101) {
+            if (status == 0x00000101) {
                 upload(body);
-                response("\n".getBytes());
+                // response("\r".getBytes());
             }
+
+            offsetStatus[lineId] |= (0x1L << 48); // 标记上传过了
             // log.info(new String(body));
             return;
         }
@@ -388,7 +388,7 @@ public class ClientService extends Thread {
             lineId = maxLineIndex.incrementAndGet(); // 新行
             buckets[bucketIndex][depth] = NumberUtil.combineInt2Long(lineId, hash); // 保存 traceId
             bucketStatus[bucketIndex]++; // hash 数量+1
-            offsetStatus[lineId] |= ((0x1L) << 40); // 标记为错误
+            offsetStatus[lineId] = ((0x1L) << 40); // 标记为错误
         } else {
             // log.info(new String(traceId) + " existent");
             tryResponse(traceId, lineId);
@@ -401,6 +401,7 @@ public class ClientService extends Thread {
 
     // 查询
     public void tryResponse(byte[] traceId, int lineId) {
+        findCount.incrementAndGet();
         // 获得这一行最新的状态 0x1 错误 0x10000 表示结束
         int status = (int) (offsetStatus[lineId] >> 32);
         int total = (int) (offsetStatus[lineId]); // 数据条数
@@ -436,7 +437,8 @@ public class ClientService extends Thread {
             if (isComplete) {
                 response(body);
             } else {
-                response("\n".getBytes());
+                // response("\n".getBytes());
+                log.error("DROP DATA: " + new String(traceId));
                 // log.info(new String(body));
             }
             // log.info(new String(body));
