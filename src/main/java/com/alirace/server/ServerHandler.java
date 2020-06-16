@@ -37,8 +37,6 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
         Message message = (Message) obj;
         // log.info("Client->Server: " + channel.remoteAddress() + " " + message.toString());
 
-        // 动态代理
-
         if (MessageType.PASS.getValue() == message.getType()) {
             byte[] body = message.getBody();
             StringBuffer buffer = new StringBuffer(20);
@@ -59,16 +57,16 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
 
         // 如果是上传数据
         if (MessageType.UPLOAD.getValue() == message.getType()) {
-            // 反序列化得到数据
             byte[] body = message.getBody();
-            StringBuffer traceId = new StringBuffer(20);
-            for (int i = 0; i < 20; i++) {
+            StringBuffer sb = new StringBuffer(16);
+            for (int i = 0; i < 16; i++) {
                 if (body[i] == (byte) '|') {
                     break;
                 }
-                traceId.append((char) (int) body[i]);
+                sb.append((char) (int) body[i]);
             }
-            // log.info(traceId.toString());
+            String traceId = sb.toString();
+            log.info(traceId);
 
             // 向其他机器广播查询请求
 //            for (Channel ch : group) {
@@ -81,12 +79,12 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
 
             // log.info(new String(body));
             // 如果当前内存中不包含 traceId 的调用链路就放入内存, 如果存在的话就合并调用链, 然后刷盘
-            byte[] result = mergeMap.putIfAbsent(traceId.toString(), body);
-
-            if (result != null) {
-                ServerService.flushResult(traceId.toString(), body, result);
-            }
-            return;
+//            byte[] result = mergeMap.putIfAbsent(traceId.toString(), body);
+//
+//            if (result != null) {
+//                ServerService.flushResult(traceId.toString(), body, result);
+//            }
+//            return;
         }
 
         if (MessageType.RESPONSE.getValue() == message.getType()) {

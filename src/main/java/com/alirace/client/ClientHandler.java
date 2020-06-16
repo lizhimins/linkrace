@@ -10,7 +10,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.alirace.client.ClientService.doConnect;
-import static com.alirace.client.ClientService.lineIndex;
 
 /**
  * My ClientHandler.
@@ -33,28 +32,6 @@ public class ClientHandler extends SimpleChannelInboundHandler<Object> {
         // 如果收到查询请求
         if (MessageType.FINISH1.getValue() == message.getType()) {
 
-            // 全部清空
-            int length = lineIndex.get();
-            for (int i = 0; i <= length; i++) {
-                ClientService.offset[i][0] = 0L;
-            }
-
-            String query = new String(message.getBody());
-            log.info(query);
-            String[] split = query.split(",");
-            for (int i = 0; i < split.length; i++) {
-                if (split[i] != null && split.length > 10) {
-                    int lineIndex = ClientService.calLineIndex(split[i]);
-                    // log.info("Set: " + split[i]);
-                    if (lineIndex != -1) {
-                        ClientService.offset[lineIndex][0] = 1L; // 设置错误
-                    }
-                }
-            }
-
-            ClientService.services.get(0).finish2();
-            ClientService.services.get(0).callFinish2();
-            return;
         }
 
         // 如果收到开始信号请求
