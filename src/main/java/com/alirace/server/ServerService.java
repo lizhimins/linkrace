@@ -57,8 +57,17 @@ public class ServerService implements Runnable {
         Thread thread = new Thread(new ServerService(), "ServerService");
         thread.start();
 
-        TimeUnit.MILLISECONDS.sleep(8500);
-        uploadData();
+        TimeUnit.MILLISECONDS.sleep(7500);
+
+//        Iterator<Map.Entry<String, byte[]>> iterator = mergeMap.entrySet().iterator();
+//        while (iterator.hasNext()) {
+//            Map.Entry<String, byte[]> entry = iterator.next();
+//            String key = entry.getKey();
+//            byte[] value = entry.getValue();
+//            flushResult(key, value);
+//            iterator.remove();
+//        }
+//        uploadData();
     }
 
     public static void startNetty() throws Exception {

@@ -21,8 +21,8 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.Proxy;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -85,6 +85,9 @@ public class ClientService extends Thread {
     private static final int WINDOW_SIZE = 20000;
     private int windowIndex = 0;
     private long[] window = new long[WINDOW_SIZE];
+
+    // 等待表
+    private static ConcurrentHashMap<Integer, byte[]> queryArea = new ConcurrentHashMap<>();
 
     // 构造函数
     public ClientService(String name) {
@@ -334,17 +337,18 @@ public class ClientService extends Thread {
 
             if (status == 0x00000100) {
                 response(body);
+                queryArea.remove(lineId);
             }
 
             if (status == 0x00000101) {
                 upload(body);
+                queryArea.remove(lineId);
                 // response("\r".getBytes());
             }
-
-            offsetStatus[lineId] |= (0x1L << 48); // 标记上传过了
             // log.info(new String(body));
-            return;
         }
+
+        offsetStatus[lineId] |= (0x1L << 48); // 标记结束
     }
 
     public static void queryOrSetFlag(byte[] traceId) {
@@ -388,7 +392,8 @@ public class ClientService extends Thread {
             lineId = maxLineIndex.incrementAndGet(); // 新行
             buckets[bucketIndex][depth] = NumberUtil.combineInt2Long(lineId, hash); // 保存 traceId
             bucketStatus[bucketIndex]++; // hash 数量+1
-            offsetStatus[lineId] = ((0x1L) << 40); // 标记为错误
+            offsetStatus[lineId] = ((0x1L) << 40); // 标记为需要被动上传
+            queryArea.put(lineId, traceId);
         } else {
             // log.info(new String(traceId) + " existent");
             tryResponse(traceId, lineId);
@@ -399,6 +404,13 @@ public class ClientService extends Thread {
 //                + String.format(" %s", " " + lineId));
     }
 
+    public static void print() {
+        for (int i = 0; i <= maxLineIndex.get(); i++) {
+            if ((int) (offsetStatus[i] >> 48) != 1) {
+                log.info(String.format("%x %d", offsetStatus[i], i));
+            }
+        }
+    }
     // 查询
     public void tryResponse(byte[] traceId, int lineId) {
         findCount.incrementAndGet();
@@ -408,7 +420,7 @@ public class ClientService extends Thread {
         // log.info(String.format("%h", status));
 
         // 结束但没有上传
-        if (status == 0) {
+        if (status == (0x1 << 16)) {
             int length = 0;
             for (int i = 0; i < total; i++) {
                 long spanOffset = offset[lineId][i];
@@ -437,7 +449,7 @@ public class ClientService extends Thread {
             if (isComplete) {
                 response(body);
             } else {
-                // response("\n".getBytes());
+                response("\n".getBytes());
                 log.error("DROP DATA: " + new String(traceId));
                 // log.info(new String(body));
             }
@@ -518,6 +530,17 @@ public class ClientService extends Thread {
     public void run() {
         try {
             pullData();
+            Iterator<Map.Entry<Integer, byte[]>> iterator = queryArea.entrySet().iterator();
+            while (iterator.hasNext()) {
+                byte[] value = iterator.next().getValue();
+                log.info(new String(value));
+                response(value);
+            }
+//            for (int i = 0; i <= maxLineIndex.get(); i++) {
+//                if ((int) (offsetStatus[i] >> 48) != 1) {
+//                    log.info(String.format("%x %d", offsetStatus[i], i));
+//                }
+//            }
         } catch (Exception e) {
             e.printStackTrace();
         }
