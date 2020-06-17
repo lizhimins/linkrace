@@ -220,13 +220,14 @@ public class ClientService extends Thread {
     }
 
     public void syncBlock() throws InterruptedException {
-        readBlockTimes++;
-        while (readBlockTimes - otherBlockTimes > 128) {
-            TimeUnit.MILLISECONDS.sleep(10);
-        }
-        // log.info(String.format("SEND SYNC: %d", readBlockTimes));
+        // 发送自己的进度
         Message message = new Message(MessageType.WAIT.getValue(), String.valueOf(readBlockTimes).getBytes());
         future.channel().writeAndFlush(message);
+        readBlockTimes++;
+        while (readBlockTimes - otherBlockTimes > 64) {
+            TimeUnit.MILLISECONDS.sleep(1);
+        }
+        // log.info(String.format("SEND SYNC: %d", readBlockTimes));
     }
 
     public static void setWait(int other) {
@@ -259,7 +260,7 @@ public class ClientService extends Thread {
         while (true) {
             // 读入一小段数据
             readByteCount = input.read(bytes, logOffset, LENGTH_PER_READ);
-            syncBlock();
+            // syncBlock();
 
             // 文件结束退出
             if (readByteCount == -1) {
@@ -536,6 +537,8 @@ public class ClientService extends Thread {
                 log.info(new String(value));
                 response(value);
             }
+            Message message = new Message(MessageType.FINISH.getValue(), "\n".getBytes());
+            future.channel().writeAndFlush(message);
 //            for (int i = 0; i <= maxLineIndex.get(); i++) {
 //                if ((int) (offsetStatus[i] >> 48) != 1) {
 //                    log.info(String.format("%x %d", offsetStatus[i], i));

@@ -105,6 +105,11 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
             }
         }
 
+        if (MessageType.FINISH.getValue() == message.getType()) {
+            if (finishCount.incrementAndGet() == 2) {
+                uploadData();
+            }
+        }
 //        // 如果日志流已经上报完, 只等数据回查的话
 //        if (MessageType.FINISH1.getValue() == message.getType()) {
 //            if (finish1.incrementAndGet() == TOTAL_SERVICES_COUNT) {

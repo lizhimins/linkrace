@@ -18,8 +18,9 @@ public class CommonController {
 
     // 程序是否准备完成
     public static volatile AtomicBoolean isReady = new AtomicBoolean(false);
-    private static Integer DATA_SOURCE_PORT = 0;
+    private static Integer DATA_SOURCE_PORT = 8002;
     private static AtomicBoolean isBeginning = new AtomicBoolean(false);
+    private static String result;
 
     public static void setReady() {
 //        try {
@@ -74,5 +75,13 @@ public class CommonController {
             }
         }
         return "suc";
+    }
+
+    @RequestMapping("/api/finish")
+    public String callFinish(@RequestParam String json) {
+        if (result == null) {
+            result = json;
+        }
+        return result;
     }
 }
