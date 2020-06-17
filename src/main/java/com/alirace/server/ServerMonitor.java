@@ -18,8 +18,8 @@ public class ServerMonitor implements Runnable {
         sb.append(String.format("REQ: %5d, ", queryRequestCount.get()));
         sb.append(String.format("RSP: %5d, ", queryResponseCount.get()));
 //        sb.append(String.format("Total Yes: %5d ", CollectService.totalYes));
-//        CollectService.mergeMap.keySet().forEach(
-//                key -> sb.append(key + " ")
+//        ServerService.mergeMap.keySet().forEach(
+//                key -> sb.append(key + "_")
 //        );
         log.info(sb.toString());
     }

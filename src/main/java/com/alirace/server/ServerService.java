@@ -74,7 +74,7 @@ public class ServerService implements Runnable {
     public static void startNetty() throws Exception {
         log.info("Server start listen at " + PORT);
         EventLoopGroup bossGroup = new NioEventLoopGroup();
-        EventLoopGroup workerGroup = new NioEventLoopGroup(2);
+        EventLoopGroup workerGroup = new NioEventLoopGroup(1);
         try {
             ServerBootstrap bootstrap = new ServerBootstrap();
             bootstrap.group(bossGroup, workerGroup).channel(NioServerSocketChannel.class)
@@ -174,7 +174,7 @@ public class ServerService implements Runnable {
 //        }
 
         String md5 = MD5Util.byteToMD5(body);
-        log.info(String.format("TraceId: %16s, MD5: %32s", traceId, md5));
+//        log.info(String.format("TraceId: %16s, MD5: %32s", traceId, md5));
 //
 //        for (int i = 0; i < bytes.length; i++) {
 //            if (bytes[i] != body[i]) {
@@ -182,7 +182,7 @@ public class ServerService implements Runnable {
 //            }
 //        }
         resultMap.put(traceId, md5);
-        mergeMap.remove(traceId);
+        // mergeMap.remove(traceId);
     }
 
     // http 调用上传接口

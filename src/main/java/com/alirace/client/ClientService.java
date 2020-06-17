@@ -6,8 +6,6 @@ import com.alirace.netty.MyDecoder;
 import com.alirace.netty.MyEncoder;
 import com.alirace.util.NumberUtil;
 import io.netty.bootstrap.Bootstrap;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
@@ -223,11 +221,11 @@ public class ClientService extends Thread {
         // 发送自己的进度
         Message message = new Message(MessageType.WAIT.getValue(), String.valueOf(readBlockTimes).getBytes());
         future.channel().writeAndFlush(message);
+        // log.info(String.format("SELF: %d, OTHER: %d", readBlockTimes, otherBlockTimes));
         readBlockTimes++;
-        while (readBlockTimes - otherBlockTimes > 64) {
+        while (readBlockTimes - otherBlockTimes > 256) {
             TimeUnit.MILLISECONDS.sleep(1);
         }
-        // log.info(String.format("SEND SYNC: %d", readBlockTimes));
     }
 
     public static void setWait(int other) {
@@ -260,7 +258,7 @@ public class ClientService extends Thread {
         while (true) {
             // 读入一小段数据
             readByteCount = input.read(bytes, logOffset, LENGTH_PER_READ);
-            // syncBlock();
+            syncBlock();
 
             // 文件结束退出
             if (readByteCount == -1) {
@@ -300,7 +298,12 @@ public class ClientService extends Thread {
 
         for (int i = windowIndex; i < windowIndex + WINDOW_SIZE; i++) {
             int now = i % 20000;
-            queryAndUpload((int) (window[now] >> 32));
+            int preLineId = (int) (window[now] >> 32);
+            int preLength = (int) window[now];
+            int nowlength = (int) offsetStatus[preLineId];
+            if (preLength == nowlength) {
+                queryAndUpload(preLineId);
+            }
         }
         log.info("Client pull data finish...");
     }
@@ -342,7 +345,7 @@ public class ClientService extends Thread {
             }
 
             if (status == 0x00000101) {
-                upload(body);
+                response(body);
                 queryArea.remove(lineId);
                 // response("\r".getBytes());
             }
@@ -393,10 +396,11 @@ public class ClientService extends Thread {
             lineId = maxLineIndex.incrementAndGet(); // 新行
             buckets[bucketIndex][depth] = NumberUtil.combineInt2Long(lineId, hash); // 保存 traceId
             bucketStatus[bucketIndex]++; // hash 数量+1
-            offsetStatus[lineId] = ((0x1L) << 40); // 标记为需要被动上传
+            offsetStatus[lineId] |= ((0x1L) << 40); // 标记为需要被动上传
             queryArea.put(lineId, traceId);
         } else {
             // log.info(new String(traceId) + " existent");
+            // offsetStatus[lineId] |= ((0x1L) << 40); // 标记为需要被动上传
             tryResponse(traceId, lineId);
         }
 
@@ -419,9 +423,9 @@ public class ClientService extends Thread {
         int status = (int) (offsetStatus[lineId] >> 32);
         int total = (int) (offsetStatus[lineId]); // 数据条数
         // log.info(String.format("%h", status));
-
-        // 结束但没有上传
-        if (status == (0x1 << 16)) {
+        // log.info(new String(traceId) + " " + String.format(" %x", status));
+        // 结束但没有上传, 进入条件是
+        if (status == 0x00010000) {
             int length = 0;
             for (int i = 0; i < total; i++) {
                 long spanOffset = offset[lineId][i];
@@ -455,16 +459,26 @@ public class ClientService extends Thread {
                 // log.info(new String(body));
             }
             // log.info(new String(body));
-            return;
+        } else {
+            // 还没结束的话只需要标记一下有错误就可以了
+            offsetStatus[lineId] |= ((0x1L) << 40); // 标记为第二种错误
         }
-
-        // 还没结束的话只需要标记一下有错误就可以了
-        offsetStatus[lineId] |= ((0x1L) << 40); // 标记为第二种错误
     }
 
     // 上传调用链
     public static void upload(byte[] body) {
         uploadCount.incrementAndGet();
+
+        StringBuffer buffer = new StringBuffer(16);
+        for (int i = 0; i <16; i++) {
+            if (body[i] == (byte) '|') {
+                break;
+            }
+            buffer.append((char) (int) body[i]);
+        }
+        String traceId = buffer.toString();
+        // log.info("SEND QUERY: " + traceId.toString());
+
         Message message = new Message(MessageType.UPLOAD.getValue(), body);
         future.channel().writeAndFlush(message);
     }
@@ -531,13 +545,18 @@ public class ClientService extends Thread {
     public void run() {
         try {
             pullData();
+
+            Message message = new Message(MessageType.WAIT.getValue(), String.valueOf(0x7FFFFFFF).getBytes());
+            future.channel().writeAndFlush(message);
+
             Iterator<Map.Entry<Integer, byte[]>> iterator = queryArea.entrySet().iterator();
             while (iterator.hasNext()) {
                 byte[] value = iterator.next().getValue();
                 log.info(new String(value));
                 response(value);
             }
-            Message message = new Message(MessageType.FINISH.getValue(), "\n".getBytes());
+
+            message = new Message(MessageType.FINISH.getValue(), "\n".getBytes());
             future.channel().writeAndFlush(message);
 //            for (int i = 0; i <= maxLineIndex.get(); i++) {
 //                if ((int) (offsetStatus[i] >> 48) != 1) {

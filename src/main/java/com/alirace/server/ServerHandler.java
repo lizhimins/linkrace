@@ -72,7 +72,7 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
             byte[] body = message.getBody();
             // 空数据直接退出
             if (body[0] == '\n' || body[0] == '\r') {
-                // log.error("ERROR LOG...");
+                log.error("ERROR LOG...");
                 return;
             }
 
@@ -84,9 +84,10 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
                 buffer.append((char) (int) body[i]);
             }
             String traceId = buffer.toString();
-
+            // log.error("RECEIVE: " + traceId);
             if (message.getLength() < 32) {
                 ServerService.flushResult(traceId, mergeMap.get(traceId));
+                mergeMap.remove(traceId);
                 return;
             }
 
@@ -110,30 +111,6 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
                 uploadData();
             }
         }
-//        // 如果日志流已经上报完, 只等数据回查的话
-//        if (MessageType.FINISH1.getValue() == message.getType()) {
-//            if (finish1.incrementAndGet() == TOTAL_SERVICES_COUNT) {
-//                int size = mergeMap.size();
-//                StringBuffer sb = new StringBuffer();
-//                Iterator<Map.Entry<String, byte[]>> iterator = mergeMap.entrySet().iterator();
-//                while (iterator.hasNext()) {
-//                    sb.append(iterator.next().getKey() + ",");
-//                }
-//                log.info("Broadcast: " + sb.toString());
-//                Message response = new Message(MessageType.FINISH1.getValue(), sb.toString().getBytes());
-//                for (Channel ch : group) {
-//                    ch.writeAndFlush(response);
-//                }
-//            }
-//        }
-//
-//        if (MessageType.FINISH2.getValue() == message.getType()) {
-//            if (finish2.incrementAndGet() == TOTAL_SERVICES_COUNT) {
-//                log.info("all finish");
-//                ServerService.flushResult2();
-//                uploadData();
-//            }
-//        }
     }
 
     @Override
