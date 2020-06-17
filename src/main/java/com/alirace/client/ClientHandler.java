@@ -9,7 +9,10 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.alirace.client.ClientService.doConnect;
+import java.util.Iterator;
+import java.util.Map;
+
+import static com.alirace.client.ClientService.*;
 
 /**
  * My ClientHandler.
@@ -39,6 +42,16 @@ public class ClientHandler extends SimpleChannelInboundHandler<Object> {
         if (MessageType.WAIT.getValue() == message.getType()) {
             int other = Integer.parseInt(new String(message.getBody()));
             ClientService.setWait(other);
+        }
+
+        if (MessageType.FINISH.getValue() == message.getType()) {
+            Iterator<Map.Entry<Integer, byte[]>> iterator = queryArea.entrySet().iterator();
+            while (iterator.hasNext()) {
+                byte[] value = iterator.next().getValue();
+                // log.info(new String(value));
+                response(value);
+            }
+            ClientService.done("\n".getBytes());
         }
 
         // 如果收到开始信号请求

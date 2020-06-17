@@ -108,6 +108,14 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
 
         if (MessageType.FINISH.getValue() == message.getType()) {
             if (finishCount.incrementAndGet() == 2) {
+                for (Channel ch : group) {
+                    ch.writeAndFlush(message);
+                }
+            }
+        }
+
+        if (MessageType.DONE.getValue() == message.getType()) {
+            if (doneCount.incrementAndGet() == 2) {
                 uploadData();
             }
         }

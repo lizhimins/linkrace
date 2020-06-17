@@ -11,6 +11,7 @@ public enum MessageType {
     RESPONSE((byte) 0x09), // 查询响应
     WAIT((byte) 0x0C), // 同步信号
     FINISH((byte) 0x0F),
+    DONE((byte) 0x06),
 
     // 客户端<-服务端
     READY((byte) 0x10), // 广播 ready 信号

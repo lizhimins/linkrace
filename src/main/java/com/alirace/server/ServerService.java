@@ -46,6 +46,7 @@ public class ServerService implements Runnable {
     public static AtomicInteger queryRequestCount = new AtomicInteger(0);
     public static AtomicInteger queryResponseCount = new AtomicInteger(0);
     public static AtomicInteger finishCount = new AtomicInteger(0);
+    public static AtomicInteger doneCount = new AtomicInteger(0);
 
     // 监听的端口号
     private static int PORT = 8003;
@@ -58,8 +59,7 @@ public class ServerService implements Runnable {
         Thread thread = new Thread(new ServerService(), "ServerService");
         thread.start();
 
-        TimeUnit.MILLISECONDS.sleep(10000);
-
+//        TimeUnit.MILLISECONDS.sleep(10000);
 //        Iterator<Map.Entry<String, byte[]>> iterator = mergeMap.entrySet().iterator();
 //        while (iterator.hasNext()) {
 //            Map.Entry<String, byte[]> entry = iterator.next();
@@ -68,7 +68,7 @@ public class ServerService implements Runnable {
 //            flushResult(key, value);
 //            iterator.remove();
 //        }
-        uploadData();
+//        uploadData();
     }
 
     public static void startNetty() throws Exception {

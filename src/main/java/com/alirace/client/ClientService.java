@@ -85,7 +85,7 @@ public class ClientService extends Thread {
     private long[] window = new long[WINDOW_SIZE];
 
     // 等待表
-    private static ConcurrentHashMap<Integer, byte[]> queryArea = new ConcurrentHashMap<>();
+    public static ConcurrentHashMap<Integer, byte[]> queryArea = new ConcurrentHashMap<>();
 
     // 构造函数
     public ClientService(String name) {
@@ -490,6 +490,12 @@ public class ClientService extends Thread {
         future.channel().writeAndFlush(message);
     }
 
+    // 结束
+    public static void done(byte[] body) {
+        Message message = new Message(MessageType.DONE.getValue(), body);
+        future.channel().writeAndFlush(message);
+    }
+
     public static void setOffsetAndRun(long length) {
         long blockSize = length / nThreads;
         log.info(HttpHeaderNames.CONTENT_LENGTH.toString() + ": " + length + ", " + blockSize);
@@ -549,20 +555,8 @@ public class ClientService extends Thread {
             Message message = new Message(MessageType.WAIT.getValue(), String.valueOf(0x7FFFFFFF).getBytes());
             future.channel().writeAndFlush(message);
 
-            Iterator<Map.Entry<Integer, byte[]>> iterator = queryArea.entrySet().iterator();
-            while (iterator.hasNext()) {
-                byte[] value = iterator.next().getValue();
-                log.info(new String(value));
-                response(value);
-            }
-
             message = new Message(MessageType.FINISH.getValue(), "\n".getBytes());
             future.channel().writeAndFlush(message);
-//            for (int i = 0; i <= maxLineIndex.get(); i++) {
-//                if ((int) (offsetStatus[i] >> 48) != 1) {
-//                    log.info(String.format("%x %d", offsetStatus[i], i));
-//                }
-//            }
         } catch (Exception e) {
             e.printStackTrace();
         }
