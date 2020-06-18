@@ -177,7 +177,7 @@ public class ClientService extends Thread {
         int nowLine = queryLineIndex();
 
         // 跳过一大段数据
-        nowOffset += 70;
+        nowOffset += 110;
 
         // 处理到末尾
         while (bytes[nowOffset] != LINE_SEPARATOR) {
