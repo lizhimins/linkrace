@@ -41,17 +41,17 @@ public class ClientHandler extends SimpleChannelInboundHandler<Object> {
 
         if (MessageType.WAIT.getValue() == message.getType()) {
             int other = Integer.parseInt(new String(message.getBody()));
-            ClientService.setWait(other);
+            // ClientService.setWait(other);
         }
 
         if (MessageType.FINISH.getValue() == message.getType()) {
-            Iterator<Map.Entry<Integer, byte[]>> iterator = queryArea.entrySet().iterator();
-            while (iterator.hasNext()) {
-                byte[] value = iterator.next().getValue();
-                // log.info(new String(value));
-                response(value);
-            }
-            ClientService.done("\n".getBytes());
+//            Iterator<Map.Entry<Integer, byte[]>> iterator = queryArea.entrySet().iterator();
+//            while (iterator.hasNext()) {
+//                byte[] value = iterator.next().getValue();
+//                // log.info(new String(value));
+//                response(value);
+//            }
+//            ClientService.done("\n".getBytes());
         }
 
         // 如果收到开始信号请求
@@ -92,6 +92,6 @@ public class ClientHandler extends SimpleChannelInboundHandler<Object> {
         System.out.println("[" + channel.remoteAddress() + "] disConnect");
         e.printStackTrace();
         ctx.close().sync();
-        doConnect();
+        NettyClient.doConnect();
     }
 }

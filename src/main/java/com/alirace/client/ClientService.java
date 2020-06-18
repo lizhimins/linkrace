@@ -1,16 +1,8 @@
 package com.alirace.client;
 
-import com.alirace.model.Message;
-import com.alirace.model.MessageType;
-import com.alirace.netty.MyDecoder;
-import com.alirace.netty.MyEncoder;
 import com.alirace.util.NumberUtil;
-import io.netty.bootstrap.Bootstrap;
-import io.netty.channel.*;
-import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.SocketChannel;
-import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http.HttpHeaders;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,83 +11,60 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.Proxy;
 import java.net.URL;
-import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.alirace.client.ClientMonitor.*;
+import static com.alirace.constant.Constant.*;
 
 public class ClientService extends Thread {
 
     private static final Logger log = LoggerFactory.getLogger(ClientService.class);
 
     // 实际工作线程
-    private int threadId;
-    private static final int nThreads = 1;
-    private static ClientService[] services = new ClientService[nThreads];
+    private int threadId = 0;
+    public static ClientService[] services = new ClientService[nThreads];
 
-    // 通信相关参数配置
-    private static final String HOST = "localhost";
-    private static final int PORT = 8003;
+    // 数据获取地址 + 开始/结束为止, 由 CommonController 传入
+    public static String path;
     private static URL url;
-    private static EventLoopGroup workerGroup;
-    private static Bootstrap bootstrap;
-    private static ChannelFuture future;
-
-    // 常量
-    private static final byte LOG_SEPARATOR = (byte) '|';
-    private static final byte LINE_SEPARATOR = (byte) '\n';
-    private static final int LENGTH_PER_READ = 1024 * 1024; // 每一次读 1M 2.8秒
-
-    // 数据获取地址, 由 CommonController 传入
-    private static String path;
-
-    // 控制偏移量
-    private long startOffset = -1L;
-    private long finishOffset = -1L;
+    private long startOffset = 0L;
+    private long finishOffset = 0L;
 
     // 机器同步算法, 防止快机太快
     public int readBlockTimes = 0;
     public int otherBlockTimes = 0;
 
+    // 字节缓冲区和处理指针
     private int preOffset = 0; // 起始偏移 左指针
     private int nowOffset = 0; // 当前偏移
     private int logOffset = 0; // 日志偏移 右指针
-
-    private static final int BYTES_LENGTH = 512 * 1024 * 1024;
-    private byte[] bytes;
+    private byte[] bytes = new byte[BYTES_SIZE];
 
     // HashMap, 低 32 字节保存 hashcode, 高 32 字节保存行号, 单例
-    private static final int BUCKET_NUM = 0x1 << 20;
-    private static final int BUCKET_CAP = 16;
-    private static int[] bucketStatus = new int[BUCKET_NUM];
-    private static long[][] buckets = new long[BUCKET_NUM][BUCKET_CAP];
+    private int[] bucketStatus = new int[BUCKET_NUM];
+    private long[][] buckets = new long[BUCKET_NUM][BUCKET_CAP];
 
-    // 偏移表, 单例
-    private static final int OFFSET_NUM = 120_0000;
-    private static final int OFFSET_CAP = 108;
-    private static long[] offsetStatus = new long[OFFSET_NUM];;
-    private static long[][] offset = new long[OFFSET_NUM][OFFSET_CAP];;
-    private static AtomicInteger maxLineIndex = new AtomicInteger(-1); // 行号原子增加
+    // 偏移表
+    private long[] offsetStatus = new long[OFFSET_NUM];;
+    private long[][] offset = new long[OFFSET_NUM][OFFSET_CAP];;
+
+    // 偏移表行号 行号原子增加
+    private AtomicInteger maxLineIndex = new AtomicInteger(-1);
 
     // 滑动窗口, 大小配置为 2万
-    private static final int WINDOW_SIZE = 20000;
     private int windowIndex = 0;
     private long[] window = new long[WINDOW_SIZE];
 
-    // 等待表
-    public static ConcurrentHashMap<Integer, byte[]> queryArea = new ConcurrentHashMap<>();
+    // 等待区, 保存没有处理到的数据
+    public ConcurrentHashMap<Integer, byte[]> queryArea = new ConcurrentHashMap<>();
+
+    public int errorCount = 0;
 
     // 构造函数
     public ClientService(String name) {
         super(name);
-        log.info("Init byte buffer successfully!");
-        bytes = new byte[BYTES_LENGTH + 4 * LENGTH_PER_READ];
-        log.info("Init window successfully!");
-        for (int i = 0; i < WINDOW_SIZE; i++) {
-            window[i] = -1L;
-        }
     }
 
     // 获得所在行的编号, 若不存在则会创建新的行注意该方法会自动推进 nowOffset
@@ -168,7 +137,7 @@ public class ClientService extends Thread {
         return false;
     }
 
-    // 处理1条日志需要调用一次这个函数
+    // 每处理一条日志, 就需要调用一次这个函数
     private void handleSpan() throws Exception {
         // 左指针 = 当前指针
         preOffset = nowOffset;
@@ -187,7 +156,8 @@ public class ClientService extends Thread {
 
         // 检查错误
         if (checkTags()) {
-            errorCount.incrementAndGet(); // 错误数量 + 1
+            errorCount++; // 错误数量 + 1
+            ClientMonitor.errorCount.incrementAndGet();
             offsetStatus[nowLine] |= (0x1L << 32); // 错误打标
         }
 
@@ -201,12 +171,12 @@ public class ClientService extends Thread {
 
         // 滑动窗口
         long data = window[windowIndex];
-        if (data != -1L) {
+        if (data != 0L) {
             int preLineId = (int) (data >> 32);
             int preLength = (int) data;
             int nowlength = (int) offsetStatus[preLineId];
             if (preLength == nowlength) {
-                queryAndUpload(preLineId);
+                // queryAndUpload(preLineId);
             }
         }
         // 循环覆盖写
@@ -217,33 +187,25 @@ public class ClientService extends Thread {
         nowOffset++;
     }
 
-    public void syncBlock() throws InterruptedException {
-        // 发送自己的进度
-        Message message = new Message(MessageType.WAIT.getValue(), String.valueOf(readBlockTimes).getBytes());
-        future.channel().writeAndFlush(message);
-        // log.info(String.format("SELF: %d, OTHER: %d", readBlockTimes, otherBlockTimes));
-        readBlockTimes++;
-        while (readBlockTimes - otherBlockTimes > 256) {
-            TimeUnit.MILLISECONDS.sleep(1);
+    @Override
+    public void run() {
+        try {
+            pullData();
+            NettyClient.wait("".getBytes());
+            NettyClient.finish("".getBytes());
+        } catch (Exception e) {
+            e.printStackTrace();
         }
-    }
-
-    public static void setWait(int other) {
-        services[0].otherBlockTimes = other;
-        // log.info(String.format("SELF: %d OTHER: %d", services[0].readBlockTimes, other));
     }
 
     // BIO 读取数据
     public void pullData() throws Exception {
         HttpURLConnection httpConnection = (HttpURLConnection) url.openConnection(Proxy.NO_PROXY);
-//        long start = startOffset != 0 ? startOffset - 3000_0000 : startOffset;
-//        long finish = startOffset == 0 ? finishOffset + 3000_0000 : finishOffset;
-//        long total = finish - start;
-//        long deal = 0;
-//        log.info(String.format("Start receive file: %10d-%10d, Data path: %s", start, finish, path));
-        log.info(String.format("Start receive file: %10d-%10d, Data path: %s", startOffset, finishOffset, path));
-        String range = String.format("bytes=%d-%d", startOffset, finishOffset);
-        httpConnection.setRequestProperty("range", range);
+        long start = threadId == 0 ? startOffset : startOffset - CROSS_RANGE;
+        long finish = startOffset == 0 ? finishOffset + CROSS_RANGE : finishOffset;
+        log.info(String.format("Start receive file: %10d-%10d, Data path: %s", start, finish, path));
+        String range = String.format("bytes=%d-%d", start, finish);
+        httpConnection.setRequestProperty(HttpHeaderNames.RANGE.toString(), range);
         InputStream input = httpConnection.getInputStream();
 
         // 初始化左右指针, 空出第一小段数据以备复制
@@ -258,7 +220,7 @@ public class ClientService extends Thread {
         while (true) {
             // 读入一小段数据
             readByteCount = input.read(bytes, logOffset, LENGTH_PER_READ);
-            syncBlock();
+            // syncBlock();
 
             // 文件结束退出
             if (readByteCount == -1) {
@@ -271,8 +233,8 @@ public class ClientService extends Thread {
             // 日志坐标右移
             logOffset += readByteCount;
 
-            // 如果不是处理第一段数据的线程, 就会有半包问题, 这时候跳过最前面的半条日志
-            if (startOffset != 0) {
+            // 如果不是第一个线程的话, 就会有半包问题, 这时候跳过最前面的半条日志
+            if (threadId != 0) {
                 while (bytes[nowOffset] != LINE_SEPARATOR) {
                     nowOffset++;
                 }
@@ -284,9 +246,8 @@ public class ClientService extends Thread {
                 handleSpan();
             }
 
-            // 如果太长了要从头开始写
+            // 如果太长了要从头开始写, 拷贝末尾的数据到头部
             if (nowOffset >= BYTES_LENGTH + LENGTH_PER_READ) {
-                // 拷贝末尾的数据
                 for (int i = nowOffset; i <= logOffset; i++) {
                     bytes[i - BYTES_LENGTH] = bytes[i];
                 }
@@ -302,7 +263,7 @@ public class ClientService extends Thread {
             int preLength = (int) window[now];
             int nowlength = (int) offsetStatus[preLineId];
             if (preLength == nowlength) {
-                queryAndUpload(preLineId);
+                // queryAndUpload(preLineId);
             }
         }
         log.info("Client pull data finish...");
@@ -336,16 +297,16 @@ public class ClientService extends Thread {
             }
 
             if (status == 0x00000001) {
-                upload(body);
+                NettyClient.upload(body);
             }
 
             if (status == 0x00000100) {
-                response(body);
+                NettyClient.response(body);
                 queryArea.remove(lineId);
             }
 
             if (status == 0x00000101) {
-                response(body);
+                NettyClient.response(body);
                 queryArea.remove(lineId);
                 // response("\r".getBytes());
             }
@@ -409,13 +370,6 @@ public class ClientService extends Thread {
 //                + String.format(" %s", " " + lineId));
     }
 
-    public static void print() {
-        for (int i = 0; i <= maxLineIndex.get(); i++) {
-            if ((int) (offsetStatus[i] >> 48) != 1) {
-                log.info(String.format("%x %d", offsetStatus[i], i));
-            }
-        }
-    }
     // 查询
     public void tryResponse(byte[] traceId, int lineId) {
         findCount.incrementAndGet();
@@ -452,9 +406,9 @@ public class ClientService extends Thread {
 
             // TODO: 校验数据, 校验不通过直接丢弃
             if (isComplete) {
-                response(body);
+                NettyClient.response(body);
             } else {
-                response("\n".getBytes());
+                NettyClient.response("\n".getBytes());
                 log.error("DROP DATA: " + new String(traceId));
                 // log.info(new String(body));
             }
@@ -465,64 +419,37 @@ public class ClientService extends Thread {
         }
     }
 
-    // 上传调用链
-    public static void upload(byte[] body) {
-        uploadCount.incrementAndGet();
-
-        StringBuffer buffer = new StringBuffer(16);
-        for (int i = 0; i <16; i++) {
-            if (body[i] == (byte) '|') {
-                break;
-            }
-            buffer.append((char) (int) body[i]);
-        }
-        String traceId = buffer.toString();
-        // log.info("SEND QUERY: " + traceId.toString());
-
-        Message message = new Message(MessageType.UPLOAD.getValue(), body);
-        future.channel().writeAndFlush(message);
-    }
-
-    // 查询响应
-    public static void response(byte[] body) {
-        responseCount.incrementAndGet();
-        Message message = new Message(MessageType.RESPONSE.getValue(), body);
-        future.channel().writeAndFlush(message);
-    }
-
-    // 结束
-    public static void done(byte[] body) {
-        Message message = new Message(MessageType.DONE.getValue(), body);
-        future.channel().writeAndFlush(message);
-    }
-
     public static void setOffsetAndRun(long length) {
         long blockSize = length / nThreads;
-        log.info(HttpHeaderNames.CONTENT_LENGTH.toString() + ": " + length + ", " + blockSize);
+        log.info(HttpHeaderNames.CONTENT_LENGTH.toString() + ": " + length + ", blockSize: " + blockSize);
         for (int i = 0; i < nThreads; i++) {
             services[i].threadId = i;
             services[i].startOffset = i * blockSize;
-            services[i].finishOffset = (i + 1) * blockSize - 1;
-            if (i == nThreads - 1) {
-                services[i].finishOffset = length - 1;
-            }
+            services[i].finishOffset = (i != nThreads-1) ? (i + 1) * blockSize - 1 : length - 1;
             services[i].start();
+        }
+    }
+
+    public void syncBlock() throws InterruptedException {
+        readBlockTimes++;
+        while (readBlockTimes - otherBlockTimes > 256) {
+            TimeUnit.MILLISECONDS.sleep(1);
         }
     }
 
     // 只初始化一次
     public static void init() throws Exception {
-        log.info("Client initializing start...");
-
-        // 监控服务
-        ClientMonitor.start();
+        log.info("ClientService start...");
 
         for (int i = 0; i < nThreads; i++) {
             services[i] = new ClientService(String.format("Client %d", i));
         }
 
+        // 监控服务
+        ClientMonitor.start();
+
         // 在最后启动 netty 进行通信
-        startNetty();
+        NettyClient.startNetty();
     }
 
     public static void setPathAndPull(String path) throws IOException {
@@ -545,65 +472,5 @@ public class ClientService extends Thread {
         long contentLength = httpConnection.getContentLengthLong();
         httpConnection.disconnect();
         return contentLength;
-    }
-
-    @Override
-    public void run() {
-        try {
-            pullData();
-
-            Message message = new Message(MessageType.WAIT.getValue(), String.valueOf(0x7FFFFFFF).getBytes());
-            future.channel().writeAndFlush(message);
-
-            message = new Message(MessageType.FINISH.getValue(), "\n".getBytes());
-            future.channel().writeAndFlush(message);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    // 启动 netty 进行通信服务
-    private static void startNetty() {
-        log.info("Client Netty doConnect...");
-        workerGroup = new NioEventLoopGroup();
-        bootstrap = new Bootstrap();
-        bootstrap.group(workerGroup)
-                .channel(NioSocketChannel.class)
-                .option(ChannelOption.SO_KEEPALIVE, true)
-                .handler(new ChannelInitializer<SocketChannel>() {
-                    @Override
-                    public void initChannel(SocketChannel ch) throws Exception {
-                        ch.pipeline().addLast("decoder", new MyDecoder());
-                        ch.pipeline().addLast("encoder", new MyEncoder());
-                        ch.pipeline().addLast(new ClientHandler());
-                    }
-                });
-        doConnect();
-        // workerGroup.shutdownGracefully();
-    }
-
-    // 连接到服务器
-    public static void doConnect() {
-        if (future != null && future.channel() != null && future.channel().isActive()) {
-            return;
-        }
-        future = bootstrap.connect(HOST, PORT);
-        future.addListener(new ChannelFutureListener() {
-            @Override
-            public void operationComplete(ChannelFuture future) throws Exception {
-                if (future.isSuccess()) {
-                    Channel channel = future.channel();
-                    log.info("Connect to server successfully!");
-                } else {
-                    // log.info("Failed to connect to server, try connect after 1s.");
-                    future.channel().eventLoop().schedule(new Runnable() {
-                        @Override
-                        public void run() {
-                            doConnect();
-                        }
-                    }, 1000, TimeUnit.MILLISECONDS);
-                }
-            }
-        });
     }
 }
