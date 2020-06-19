@@ -2,13 +2,13 @@ package com.alirace.client;
 
 import com.alirace.util.NumberUtil;
 import io.netty.handler.codec.http.HttpHeaderNames;
-import io.netty.handler.codec.http.HttpHeaders;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
 import java.net.Proxy;
 import java.net.URL;
 import java.util.concurrent.ConcurrentHashMap;
@@ -63,8 +63,12 @@ public class ClientService extends Thread {
     public int errorCount = 0;
 
     // 构造函数
-    public ClientService(String name) {
+    public ClientService(String name, int threadId) {
         super(name);
+        for (int i = 0; i < BYTES_SIZE; i++) {
+            bytes[i] = '\n';
+        }
+        this.threadId = threadId;
     }
 
     // 获得所在行的编号, 若不存在则会创建新的行注意该方法会自动推进 nowOffset
@@ -158,6 +162,13 @@ public class ClientService extends Thread {
         if (checkTags()) {
             errorCount++; // 错误数量 + 1
             ClientMonitor.errorCount.incrementAndGet();
+//            if (threadId == 1) {
+//                StringBuffer sb = new StringBuffer();
+//                for (int i = preOffset; i < preOffset + 16; i++) {
+//                    sb.append((char) (int) bytes[i]);
+//                }
+//                // System.out.println(sb.toString());
+//            }
             offsetStatus[nowLine] |= (0x1L << 32); // 错误打标
         }
 
@@ -176,7 +187,7 @@ public class ClientService extends Thread {
             int preLength = (int) data;
             int nowlength = (int) offsetStatus[preLineId];
             if (preLength == nowlength) {
-                // queryAndUpload(preLineId);
+                queryAndUpload(preLineId);
             }
         }
         // 循环覆盖写
@@ -191,8 +202,9 @@ public class ClientService extends Thread {
     public void run() {
         try {
             pullData();
-            NettyClient.wait("".getBytes());
-            NettyClient.finish("".getBytes());
+            ClientMonitor.printStatus();
+            // NettyClient.wait("".getBytes());
+            // NettyClient.finish("".getBytes());
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -208,14 +220,17 @@ public class ClientService extends Thread {
         httpConnection.setRequestProperty(HttpHeaderNames.RANGE.toString(), range);
         InputStream input = httpConnection.getInputStream();
 
-        // 初始化左右指针, 空出第一小段数据以备复制
-        preOffset = LENGTH_PER_READ;
-        nowOffset = LENGTH_PER_READ;
-        logOffset = LENGTH_PER_READ;
-
         // 读入一小段数据
         int readByteCount = input.read(bytes, logOffset, LENGTH_PER_READ);
         logOffset += readByteCount;
+
+        // 如果不是第一个线程的话, 就会有半包问题, 这时候跳过最前面的一条
+        if (threadId != 0) {
+            while (bytes[nowOffset] != LINE_SEPARATOR) {
+                nowOffset++;
+            }
+            nowOffset++;
+        }
 
         while (true) {
             // 读入一小段数据
@@ -233,26 +248,18 @@ public class ClientService extends Thread {
             // 日志坐标右移
             logOffset += readByteCount;
 
-            // 如果不是第一个线程的话, 就会有半包问题, 这时候跳过最前面的半条日志
-            if (threadId != 0) {
-                while (bytes[nowOffset] != LINE_SEPARATOR) {
-                    nowOffset++;
-                }
-                nowOffset++;
-            }
-
             // 循环处理所有数据
             while (nowOffset + LENGTH_PER_READ < logOffset) {
                 handleSpan();
             }
 
             // 如果太长了要从头开始写, 拷贝末尾的数据到头部
-            if (nowOffset >= BYTES_LENGTH + LENGTH_PER_READ) {
+            if (logOffset >= BYTES_LENGTH) {
                 for (int i = nowOffset; i <= logOffset; i++) {
-                    bytes[i - BYTES_LENGTH] = bytes[i];
+                    bytes[i - nowOffset] = bytes[i];
                 }
-                nowOffset -= BYTES_LENGTH;
-                logOffset -= BYTES_LENGTH;
+                logOffset -= nowOffset;
+                nowOffset = 0;
                 // log.info("rewrite");
             }
         }
@@ -266,6 +273,9 @@ public class ClientService extends Thread {
                 // queryAndUpload(preLineId);
             }
         }
+
+        input.close();
+        httpConnection.disconnect();
         log.info("Client pull data finish...");
     }
 
@@ -301,12 +311,12 @@ public class ClientService extends Thread {
             }
 
             if (status == 0x00000100) {
-                NettyClient.response(body);
+                //NettyClient.response(body);
                 queryArea.remove(lineId);
             }
 
             if (status == 0x00000101) {
-                NettyClient.response(body);
+                //NettyClient.response(body);
                 queryArea.remove(lineId);
                 // response("\r".getBytes());
             }
@@ -406,9 +416,9 @@ public class ClientService extends Thread {
 
             // TODO: 校验数据, 校验不通过直接丢弃
             if (isComplete) {
-                NettyClient.response(body);
+                // NettyClient.response(body);
             } else {
-                NettyClient.response("\n".getBytes());
+                // NettyClient.response("\n".getBytes());
                 log.error("DROP DATA: " + new String(traceId));
                 // log.info(new String(body));
             }
@@ -419,11 +429,10 @@ public class ClientService extends Thread {
         }
     }
 
-    public static void setOffsetAndRun(long length) {
+    public static void setOffsetAndRun(long length) throws MalformedURLException {
         long blockSize = length / nThreads;
         log.info(HttpHeaderNames.CONTENT_LENGTH.toString() + ": " + length + ", blockSize: " + blockSize);
         for (int i = 0; i < nThreads; i++) {
-            services[i].threadId = i;
             services[i].startOffset = i * blockSize;
             services[i].finishOffset = (i != nThreads-1) ? (i + 1) * blockSize - 1 : length - 1;
             services[i].start();
@@ -442,7 +451,7 @@ public class ClientService extends Thread {
         log.info("ClientService start...");
 
         for (int i = 0; i < nThreads; i++) {
-            services[i] = new ClientService(String.format("Client %d", i));
+            services[i] = new ClientService(String.format("Client %d", i), i);
         }
 
         // 监控服务

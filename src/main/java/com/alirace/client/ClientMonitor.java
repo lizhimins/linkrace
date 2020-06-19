@@ -24,12 +24,18 @@ public class ClientMonitor implements Runnable {
         thread.start();
     }
 
-    private void printStatus() {
+    public static void printStatus() {
         StringBuffer sb = new StringBuffer();
-        sb.append(String.format("ERROR: %6d, %6d, %6d",
+//        sb.append(String.format("ERROR: %6d, %6d",
+//                ClientService.services[0].errorCount,
+//                // ClientService.services[1].errorCount,
+//                errorCount.get()));
+
+        sb.append(String.format("ERROR: %6d, %6d, %6d ",
                 ClientService.services[0].errorCount,
                 ClientService.services[1].errorCount,
                 errorCount.get()));
+
         sb.append(String.format("UPLOAD: %6d, ", uploadCount.get()));
         sb.append(String.format("QUERY: %6d, ", queryCount.get()));
         sb.append(String.format("FIND: %6d, ", findCount.get()));
