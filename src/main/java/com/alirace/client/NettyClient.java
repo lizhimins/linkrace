@@ -55,7 +55,7 @@ public class NettyClient {
     // 发送自己的进度
     public static void sendSync(long syncValue) {
         Message message = new Message(MessageType.SYNC.getValue(), String.valueOf(syncValue).getBytes());
-        log.info(String.format("SEND: %x", syncValue));
+        // log.info(String.format("SEND: %x", syncValue));
         future.channel().writeAndFlush(message);
     }
 

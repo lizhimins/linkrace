@@ -373,12 +373,12 @@ public class ClientService extends Thread {
             }
 
             if (status == 0x00000100) {
-                //NettyClient.response(body);
+                NettyClient.response(body);
                 queryArea.remove(lineId);
             }
 
             if (status == 0x00000101) {
-                //NettyClient.response(body);
+                NettyClient.response(body);
                 queryArea.remove(lineId);
                 // response("\r".getBytes());
             }
@@ -508,9 +508,9 @@ public class ClientService extends Thread {
 
             // TODO: 校验数据, 校验不通过直接丢弃
             if (isComplete) {
-                // NettyClient.response(body);
+                NettyClient.response(body);
             } else {
-                // NettyClient.response("\n".getBytes());
+                NettyClient.response("\n".getBytes());
                 log.error("DROP DATA: " + new String(traceId));
                 // log.info(new String(body));
             }

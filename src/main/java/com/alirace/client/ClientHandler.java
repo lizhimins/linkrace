@@ -28,21 +28,19 @@ public class ClientHandler extends SimpleChannelInboundHandler<Object> {
 
         // 如果收到查询请求
         if (MessageType.QUERY.getValue() == message.getType()) {
-            // log.info(new String(message.getBody()));
+            // log.info("RECEIVE QUERY -> " + new String(message.getBody()));
             ClientMonitor.queryCount.incrementAndGet();
+            byte[] body = message.getBody();
+            services[0].queryAndSetFlag(body);
+            services[1].queryAndSetFlag(body);
             return;
         }
-
-//        // 如果收到查询请求
-//        f (MessageType.FINISH1.getValue() == message.getType()) {
-////
-////        }
 
         if (MessageType.SYNC.getValue() == message.getType()) {
             long syncValue = Long.parseLong(new String(message.getBody()));
             int serviceId = (int) (syncValue >> 32);
             int otherTimes = (int) syncValue;
-            log.info(String.format("RECV: %x", syncValue));
+            // log.info(String.format("RECV: %x", syncValue));
             services[serviceId].otherBlockTimes = otherTimes;
         }
 

@@ -55,7 +55,7 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
                 if (ch != channel) {
                     queryRequestCount.incrementAndGet();
                     Message query = new Message(MessageType.QUERY.getValue(), traceId.getBytes());
-                    // ch.writeAndFlush(query);
+                    ch.writeAndFlush(query);
                 }
             }
 
