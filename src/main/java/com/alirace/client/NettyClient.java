@@ -60,13 +60,8 @@ public class NettyClient {
     }
 
     // 结束
-    public static void wait(byte[] body) {
-        Message message = new Message(MessageType.SYNC.getValue(), String.valueOf(0x7FFFFFFF).getBytes());
-        future.channel().writeAndFlush(message);
-    }
-
     public static void finish(byte[] body) {
-        Message message = new Message(MessageType.FINISH.getValue(), "\n".getBytes());
+        Message message = new Message(MessageType.FINISH.getValue(), body);
         future.channel().writeAndFlush(message);
     }
 

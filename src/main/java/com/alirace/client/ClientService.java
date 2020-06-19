@@ -207,7 +207,7 @@ public class ClientService extends Thread {
             ClientMonitor.printStatus();
             long syncValue = NumberUtil.combineInt2Long(threadId, Integer.MAX_VALUE);
             NettyClient.sendSync(syncValue);
-
+            NettyClient.finish("\n".getBytes());
             // NettyClient.wait("".getBytes());
             // NettyClient.finish("".getBytes());
         } catch (Exception e) {

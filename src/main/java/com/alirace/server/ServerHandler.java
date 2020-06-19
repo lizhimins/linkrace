@@ -107,7 +107,7 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
         }
 
         if (MessageType.FINISH.getValue() == message.getType()) {
-            if (finishCount.incrementAndGet() == 2) {
+            if (finishCount.incrementAndGet() == 4) {
                 for (Channel ch : group) {
                     ch.writeAndFlush(message);
                 }
@@ -116,6 +116,12 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
 
         if (MessageType.DONE.getValue() == message.getType()) {
             if (doneCount.incrementAndGet() == 2) {
+                Iterator<Map.Entry<String, byte[]>> iterator = mergeMap.entrySet().iterator();
+                while (iterator.hasNext()) {
+                    Map.Entry<String, byte[]> entry = iterator.next();
+                    flushResult(entry.getKey(), entry.getValue());
+                    iterator.remove();
+                }
                 uploadData();
             }
         }

@@ -59,7 +59,7 @@ public class ServerService implements Runnable {
         Thread thread = new Thread(new ServerService(), "ServerService");
         thread.start();
 
-        TimeUnit.MILLISECONDS.sleep(5500);
+//        TimeUnit.MILLISECONDS.sleep(5500);
 //        Iterator<Map.Entry<String, byte[]>> iterator = mergeMap.entrySet().iterator();
 //        while (iterator.hasNext()) {
 //            Map.Entry<String, byte[]> entry = iterator.next();
@@ -68,7 +68,7 @@ public class ServerService implements Runnable {
 //            flushResult(key, value);
 //            iterator.remove();
 //        }
-        uploadData();
+//        uploadData();
     }
 
     public static void startNetty() throws Exception {

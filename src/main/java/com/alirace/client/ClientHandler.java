@@ -52,6 +52,7 @@ public class ClientHandler extends SimpleChannelInboundHandler<Object> {
 //                response(value);
 //            }
 //            ClientService.done("\n".getBytes());
+            NettyClient.done("\n".getBytes());
         }
 
         // 如果收到开始信号请求
