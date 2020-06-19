@@ -31,6 +31,7 @@ public class ClientService extends Thread {
     private static URL url;
     private long startOffset = 0L;
     private long finishOffset = 0L;
+    public long total = 0L;
 
     // 机器同步算法, 防止快机太快
     public int readBlockTimes = 0;
@@ -196,6 +197,7 @@ public class ClientService extends Thread {
 
         // 最后一个符号是 \n
         nowOffset++;
+        total += nowOffset - preOffset;
     }
 
     @Override
@@ -203,6 +205,8 @@ public class ClientService extends Thread {
         try {
             pullData();
             ClientMonitor.printStatus();
+
+            log.info("TOTAL: " + total);
             // NettyClient.wait("".getBytes());
             // NettyClient.finish("".getBytes());
         } catch (Exception e) {
@@ -221,15 +225,60 @@ public class ClientService extends Thread {
         InputStream input = httpConnection.getInputStream();
 
         // 读入一小段数据
-        int readByteCount = input.read(bytes, logOffset, LENGTH_PER_READ);
-        logOffset += readByteCount;
+        int readByteCount;
+        for (int i = 0; i < 32; i++) {
+            readByteCount = input.read(bytes, logOffset, LENGTH_PER_READ);
+            logOffset += readByteCount;
+        }
 
-        // 如果不是第一个线程的话, 就会有半包问题, 这时候跳过最前面的一条
+        // 如果不是第一个线程的话
         if (threadId != 0) {
+
+            // 跳过最前面的一条
             while (bytes[nowOffset] != LINE_SEPARATOR) {
                 nowOffset++;
             }
             nowOffset++;
+            total = nowOffset; // 计数
+
+            while (nowOffset < CROSS_RANGE * 2) {
+                // 左指针 = 当前指针
+                preOffset = nowOffset;
+
+                // 查询行号: traceId -> nowLine
+                int nowLine = queryLineIndex();
+
+                // 跳过一大段数据
+                nowOffset += 110;
+
+                // 处理到末尾
+                while (bytes[nowOffset] != LINE_SEPARATOR) {
+                    nowOffset++;
+                }
+                // log.info(preOffset + "-" + nowOffset);
+
+                // 检查错误
+                if (checkTags()) {
+                    errorCount++; // 错误数量 + 1
+                    ClientMonitor.errorCount.incrementAndGet();
+                    offsetStatus[nowLine] |= (0x1L << 32); // 错误打标
+                }
+
+                long status = offsetStatus[nowLine];
+                offset[nowLine][(int) status] = NumberUtil.combineInt2Long(preOffset, nowOffset);
+
+                // 保存到同一个 long 上
+                // offset 数组的第一个格子, 高位保存状态, 低位保存数据条数
+                offsetStatus[nowLine]++;
+
+                // 滑动窗口, 循环覆盖写
+                window[windowIndex] = NumberUtil.combineInt2Long(nowLine, (int) (offsetStatus[nowLine]));
+                windowIndex = (windowIndex + 1) % WINDOW_SIZE;
+
+                // 最后一个符号是 \n
+                nowOffset++;
+                total += nowOffset - preOffset;
+            }
         }
 
         while (true) {
@@ -270,7 +319,18 @@ public class ClientService extends Thread {
             int preLength = (int) window[now];
             int nowlength = (int) offsetStatus[preLineId];
             if (preLength == nowlength) {
-                // queryAndUpload(preLineId);
+                if (threadId != 0) {
+                    queryAndUpload(preLineId);
+                } else {
+                    int startPos = (int) (offset[preLineId][0] >> 32);
+                    byte[] traceId = new byte[16];
+                    int index = 0;
+                    for (int j = 0; j < 16; j++) {
+                        traceId[j] = bytes[startPos + j];
+                    }
+                    int lineId = services[1].queryLineId(traceId);
+                    log.info(startPos + " " + lineId);
+                }
             }
         }
 
@@ -328,6 +388,40 @@ public class ClientService extends Thread {
 
     public static void queryOrSetFlag(byte[] traceId) {
         services[0].queryAndSetFlag(traceId);
+    }
+
+    public int queryLineId(byte[] traceId) {
+        // 根据前几位计算桶的编号
+        int bucketIndex = 0;
+        for (int i = 0; i < 5; i++) {
+            byte b = traceId[i];
+            if ('0' <= b && b <= '9') {
+                bucketIndex = bucketIndex * 16 + ((int) b - '0');
+            } else {
+                bucketIndex = bucketIndex * 16 + ((int) b - 'a') + 10;
+            }
+        }
+
+        int hash = 0;
+        for (int i = 5; i < 13; i++) {
+            byte b = traceId[i];
+            if ('0' <= b && b <= '9') {
+                hash = hash * 16 + ((int) b - '0');
+            } else {
+                hash = hash * 16 + ((int) b - 'a') + 10;
+            }
+        }
+
+        // 检测是否已经出现过
+        int depth = bucketStatus[bucketIndex];
+        for (int i = 0; i < depth; i++) {
+            long value = buckets[bucketIndex][i];
+            if (hash == (int) value) {
+                // log.info(String.format("bucketIndex: %6d, hashCode: %6d, ele: %6d", bucketIndex, hash, elements));
+                return (int) (value >> 32);
+            }
+        }
+        return -1;
     }
 
     public void queryAndSetFlag(byte[] traceId) {
