@@ -32,17 +32,15 @@ public class NettyClient {
     // 上传调用链
     public static void upload(byte[] body) {
         uploadCount.incrementAndGet();
-
-        StringBuffer buffer = new StringBuffer(16);
-        for (int i = 0; i <16; i++) {
-            if (body[i] == (byte) '|') {
-                break;
-            }
-            buffer.append((char) (int) body[i]);
-        }
-        String traceId = buffer.toString();
+//        StringBuffer buffer = new StringBuffer(16);
+//        for (int i = 0; i <16; i++) {
+//            if (body[i] == (byte) '|') {
+//                break;
+//            }
+//            buffer.append((char) (int) body[i]);
+//        }
+//        String traceId = buffer.toString();
         // log.info("SEND QUERY: " + traceId.toString());
-
         Message message = new Message(MessageType.UPLOAD.getValue(), body);
         future.channel().writeAndFlush(message);
     }
@@ -54,16 +52,16 @@ public class NettyClient {
         future.channel().writeAndFlush(message);
     }
 
-    public static void sendSync(byte[] body) {
-        // 发送自己的进度
-        Message message = new Message(MessageType.WAIT.getValue(), String.valueOf(0).getBytes());
+    // 发送自己的进度
+    public static void sendSync(long syncValue) {
+        Message message = new Message(MessageType.SYNC.getValue(), String.valueOf(syncValue).getBytes());
+        log.info(String.format("SEND: %x", syncValue));
         future.channel().writeAndFlush(message);
-        // log.info(String.format("SELF: %d, OTHER: %d", readBlockTimes, otherBlockTimes));
     }
 
     // 结束
     public static void wait(byte[] body) {
-        Message message = new Message(MessageType.WAIT.getValue(), String.valueOf(0x7FFFFFFF).getBytes());
+        Message message = new Message(MessageType.SYNC.getValue(), String.valueOf(0x7FFFFFFF).getBytes());
         future.channel().writeAndFlush(message);
     }
 

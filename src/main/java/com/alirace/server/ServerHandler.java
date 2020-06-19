@@ -98,7 +98,7 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
         }
 
         // 同步算法
-        if (MessageType.WAIT.getValue() == message.getType()) {
+        if (MessageType.SYNC.getValue() == message.getType()) {
             for (Channel ch : group) {
                 if (ch != channel) {
                     ch.writeAndFlush(message);

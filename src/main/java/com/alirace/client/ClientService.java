@@ -205,8 +205,9 @@ public class ClientService extends Thread {
         try {
             pullData();
             ClientMonitor.printStatus();
+            long syncValue = NumberUtil.combineInt2Long(threadId, Integer.MAX_VALUE);
+            NettyClient.sendSync(syncValue);
 
-            log.info("TOTAL: " + total);
             // NettyClient.wait("".getBytes());
             // NettyClient.finish("".getBytes());
         } catch (Exception e) {
@@ -284,7 +285,7 @@ public class ClientService extends Thread {
         while (true) {
             // 读入一小段数据
             readByteCount = input.read(bytes, logOffset, LENGTH_PER_READ);
-            // syncBlock();
+            syncBlock();
 
             // 文件结束退出
             if (readByteCount == -1) {
@@ -329,7 +330,8 @@ public class ClientService extends Thread {
                         traceId[j] = bytes[startPos + j];
                     }
                     int lineId = services[1].queryLineId(traceId);
-                    log.info(startPos + " " + lineId);
+                    // log.info(startPos + " " + lineId);
+                    services[1].queryAndUpload(lineId);
                 }
             }
         }
@@ -384,10 +386,6 @@ public class ClientService extends Thread {
         }
 
         offsetStatus[lineId] |= (0x1L << 48); // 标记结束
-    }
-
-    public static void queryOrSetFlag(byte[] traceId) {
-        services[0].queryAndSetFlag(traceId);
     }
 
     public int queryLineId(byte[] traceId) {
@@ -535,8 +533,12 @@ public class ClientService extends Thread {
 
     public void syncBlock() throws InterruptedException {
         readBlockTimes++;
-        while (readBlockTimes - otherBlockTimes > 256) {
+        while (readBlockTimes - otherBlockTimes > 64) {
             TimeUnit.MILLISECONDS.sleep(1);
+        }
+        if (readBlockTimes % 16 == 0) {
+            long syncValue = NumberUtil.combineInt2Long(threadId, readBlockTimes);
+            NettyClient.sendSync(syncValue);
         }
     }
 

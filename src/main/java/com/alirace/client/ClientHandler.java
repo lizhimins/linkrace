@@ -30,7 +30,6 @@ public class ClientHandler extends SimpleChannelInboundHandler<Object> {
         if (MessageType.QUERY.getValue() == message.getType()) {
             // log.info(new String(message.getBody()));
             ClientMonitor.queryCount.incrementAndGet();
-            ClientService.queryOrSetFlag(message.getBody());
             return;
         }
 
@@ -39,9 +38,12 @@ public class ClientHandler extends SimpleChannelInboundHandler<Object> {
 ////
 ////        }
 
-        if (MessageType.WAIT.getValue() == message.getType()) {
-            int other = Integer.parseInt(new String(message.getBody()));
-            // ClientService.setWait(other);
+        if (MessageType.SYNC.getValue() == message.getType()) {
+            long syncValue = Long.parseLong(new String(message.getBody()));
+            int serviceId = (int) (syncValue >> 32);
+            int otherTimes = (int) syncValue;
+            log.info(String.format("RECV: %x", syncValue));
+            services[serviceId].otherBlockTimes = otherTimes;
         }
 
         if (MessageType.FINISH.getValue() == message.getType()) {
