@@ -1,5 +1,6 @@
 package com.alirace.client;
 
+import com.alirace.constant.Constant;
 import com.alirace.model.Message;
 import com.alirace.model.MessageType;
 import com.alirace.netty.MyDecoder;
@@ -11,6 +12,7 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import sun.rmi.runtime.Log;
 
 import java.net.URL;
 import java.util.concurrent.TimeUnit;
@@ -41,6 +43,33 @@ public class NettyClient {
 //        }
 //        String traceId = buffer.toString();
         // log.info("SEND QUERY: " + traceId.toString());
+
+        // log.info(new String(body));
+//        String[] split = new String(body).split("\n");
+//        boolean flag = true;
+//        StringBuffer sb = new StringBuffer();
+//        for (int i = 0; i < split.length; i++) {
+//            long pre = 0L;
+//            String traceId = split[i];
+//            if (traceId != null) {
+//                String[] seg = traceId.split("\\|");
+//                // System.out.print(seg[1] + " ");
+//                sb.append(seg[1]);
+//                sb.append(" ");
+//
+//                if (Long.parseLong(seg[1]) <= pre) {
+//                    flag = false;
+//                }
+//
+//                pre = Long.parseLong(seg[1]);
+//            }
+//
+//        }
+//        if (!flag) {
+//            log.info("NO " + sb.toString());
+//        }
+
+        // log.info("UPLOAD -> " + new String(body));
         Message message = new Message(MessageType.UPLOAD.getValue(), body);
         future.channel().writeAndFlush(message);
     }
@@ -49,6 +78,7 @@ public class NettyClient {
     public static void response(byte[] body) {
         responseCount.incrementAndGet();
         Message message = new Message(MessageType.RESPONSE.getValue(), body);
+//        log.info("RESPONSE -> " + new String(body));
         future.channel().writeAndFlush(message);
     }
 

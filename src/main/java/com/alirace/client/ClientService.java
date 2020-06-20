@@ -1,5 +1,6 @@
 package com.alirace.client;
 
+import com.alirace.constant.Constant;
 import com.alirace.util.NumberUtil;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import org.slf4j.Logger;
@@ -345,38 +346,18 @@ public class ClientService extends Thread {
     public void queryAndUpload(int lineId) {
         // 获得这一行最新的状态 0x1 错误 0x10000 表示结束
         int status = (int) (offsetStatus[lineId] >> 32);
-        int total = (int) (offsetStatus[lineId]); // 数据条数
         // log.info(String.format("%h", status));
 
         // 有错误
         if (status != 0) {
-            int length = 0;
-            for (int i = 0; i < total; i++) {
-                long spanOffset = offset[lineId][i];
-                length += (int) spanOffset - (int) (spanOffset >> 32) + 1;
-            }
-
-            int index = 0;
-            byte[] body = new byte[length];
-            for (int i = 0; i < total; i++) {
-                long spanOffset = offset[lineId][i];
-                int start = (int) (spanOffset >> 32);
-                int finish = (int) spanOffset;
-                for (int j = start; j <= finish; j++) {
-                    body[index] = bytes[j];
-                    index++;
-                }
-            }
-
+            byte[] body = getDataByLineId(lineId);
             if (status == 0x00000001) {
                 NettyClient.upload(body);
             }
-
             if (status == 0x00000100) {
                 NettyClient.response(body);
                 queryArea.remove(lineId);
             }
-
             if (status == 0x00000101) {
                 NettyClient.response(body);
                 queryArea.remove(lineId);
@@ -472,6 +453,66 @@ public class ClientService extends Thread {
 //                + String.format(" %s", " " + lineId));
     }
 
+    public byte[] getDataByLineId(int lineId) {
+        int spanNum = (int) (offsetStatus[lineId]); // 数据条数
+
+        int startIndex = (int) (offset[lineId][0] >> 32);
+
+        int traceIdLength = 0;
+        while (bytes[startIndex++] != LOG_SEPARATOR) {
+            traceIdLength++;
+        }
+        traceIdLength++;
+
+        int pos = 0;
+        long[] timeTMP = new long[108];
+        long[] offsetTMP = new long[108];
+
+        int length = 0; long values = 0;
+        for (int i = 0; i < spanNum; i++) {
+            long spanOffset = offset[lineId][i];
+            int start = (int) (spanOffset >> 32);
+            int finish = (int) spanOffset;
+            length += finish - start + 1;
+            for (int j = start + traceIdLength; j < start + traceIdLength + 16; j++) {
+                values <<= 4; values |= ((bytes[j] - '0') & 0xff);
+            }
+
+            // log.info(String.format("%x", values));
+
+            timeTMP[pos] = values;
+            offsetTMP[pos] = spanOffset;
+            pos++;
+        }
+
+        NumberUtil.bubbleSort(timeTMP, offsetTMP, spanNum);
+
+//        System.out.print("TIME: ");
+//        for (int i = 0; i < spanNum; i++) {
+//            System.out.print(String.format("%x ", timeTMP[i]));
+//        }
+//        System.out.println();
+//
+//        System.out.print("offset: ");
+//        for (int i = 0; i < spanNum; i++) {
+//            System.out.print(offsetTMP[i] + " ");
+//        }
+//        System.out.println();
+
+        int index = 0;
+        byte[] body = new byte[length];
+        for (int i = 0; i < spanNum; i++) {
+            long spanOffset = offsetTMP[i];
+            int start = (int) (spanOffset >> 32);
+            int finish = (int) spanOffset;
+            for (int j = start; j <= finish; j++) {
+                body[index] = bytes[j];
+                index++;
+            }
+        }
+        return body;
+    }
+
     // 查询
     public void tryResponse(byte[] traceId, int lineId) {
         findCount.incrementAndGet();
@@ -482,32 +523,17 @@ public class ClientService extends Thread {
         // log.info(new String(traceId) + " " + String.format(" %x", status));
         // 结束但没有上传, 进入条件是
         if (status == 0x00010000) {
-            int length = 0;
-            for (int i = 0; i < total; i++) {
-                long spanOffset = offset[lineId][i];
-                length += (int) spanOffset - (int) (spanOffset >> 32) + 1;
-            }
+            byte[] body = getDataByLineId(lineId);
 
-            boolean isComplete = true;
-            int index = 0;
-            byte[] body = new byte[length];
-            for (int i = 0; i < total; i++) {
-                long spanOffset = offset[lineId][i];
-                int start = (int) (spanOffset >> 32);
-                int finish = (int) spanOffset;
-                for (int j = 0; j < 12; j++) {
-                    if (traceId[j] != bytes[start + j]) {
-                        isComplete = false; break;
-                    }
-                }
-                for (int j = start; j <= finish; j++) {
-                    body[index] = bytes[j];
-                    index++;
+            boolean isError = false;
+            for (int i = 0; i < traceId.length; i++) {
+                if (traceId[i] != body[i]) {
+                    isError = true;
+                    break;
                 }
             }
-
             // TODO: 校验数据, 校验不通过直接丢弃
-            if (isComplete) {
+            if (!isError) {
                 NettyClient.response(body);
             } else {
                 NettyClient.response("\n".getBytes());

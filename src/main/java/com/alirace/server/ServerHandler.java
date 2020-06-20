@@ -3,6 +3,7 @@ package com.alirace.server;
 import com.alirace.controller.CommonController;
 import com.alirace.model.Message;
 import com.alirace.model.MessageType;
+import com.alirace.util.MD5Util;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
@@ -62,7 +63,9 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
             // 如果当前内存中不包含 traceId 的调用链路就放入内存, 如果存在的话就合并调用链, 然后刷盘
             byte[] result = mergeMap.putIfAbsent(traceId, body);
             if (result != null) {
-                ServerService.flushResult(traceId, body, result);
+                String md5 = flushResult(body, result);
+                resultMap.put(traceId, md5);
+                mergeMap.remove(traceId);
             }
             return;
         }
@@ -85,15 +88,17 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
             }
             String traceId = buffer.toString();
             // log.error("RECEIVE: " + traceId);
-            if (message.getLength() < 32) {
-                ServerService.flushResult(traceId, mergeMap.get(traceId));
-                mergeMap.remove(traceId);
-                return;
-            }
+//            if (message.getLength() < 32) {
+//                ServerService.flushResult(mergeMap.get(traceId));
+//                mergeMap.remove(traceId);
+//                return;
+//            }
 
             byte[] result = mergeMap.get(traceId);
             if (result != null) {
-                ServerService.flushResult(traceId, body, result);
+                String md5 = flushResult(body, result);
+                resultMap.put(traceId, md5);
+                mergeMap.remove(traceId);
             }
         }
 
@@ -119,7 +124,19 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
                 Iterator<Map.Entry<String, byte[]>> iterator = mergeMap.entrySet().iterator();
                 while (iterator.hasNext()) {
                     Map.Entry<String, byte[]> entry = iterator.next();
-                    flushResult(entry.getKey(), entry.getValue());
+                    byte[] body = entry.getValue();
+                    StringBuffer buffer = new StringBuffer(16);
+                    for (int i = 0; i < 16; i++) {
+                        if (body[i] == (byte) '|') {
+                            break;
+                        }
+                        buffer.append((char) (int) body[i]);
+                    }
+                    String traceId = buffer.toString();
+                    // String md5 = MD5Util.byteToMD5(entry.getValue());
+                    String md5 = ServerService.flushResult3(entry.getValue());
+                    resultMap.put(traceId, md5);
+                    // log.info(new String(entry.getValue()));
                     iterator.remove();
                 }
                 uploadData();

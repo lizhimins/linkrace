@@ -1,6 +1,7 @@
 package com.alirace.server;
 
 import com.alibaba.fastjson.JSON;
+import com.alirace.constant.Constant;
 import com.alirace.controller.CommonController;
 import com.alirace.model.TraceLog;
 import com.alirace.netty.MyDecoder;
@@ -37,10 +38,10 @@ public class ServerService implements Runnable {
 
     // 用来存放待合并的数据 traceId -> record
     private static final int MAX_HASHMAP_SIZE = 1024 * 16;
-    public static ConcurrentHashMap<String, byte[]> mergeMap = new ConcurrentHashMap(MAX_HASHMAP_SIZE);
+    public static HashMap<String, byte[]> mergeMap = new HashMap(MAX_HASHMAP_SIZE);
 
     // 用来存放剩下的数据 traceId -> md5
-    public static ConcurrentHashMap<String, String> resultMap = new ConcurrentHashMap(MAX_HASHMAP_SIZE);
+    public static HashMap<String, String> resultMap = new HashMap(MAX_HASHMAP_SIZE);
 
     // 发出的查询数量 和 收到的响应数量, 需要支持并发
     public static AtomicInteger queryRequestCount = new AtomicInteger(0);
@@ -98,8 +99,112 @@ public class ServerService implements Runnable {
         }
     }
 
-    // 结果转移 + 刷盘
-    public static void flushResult(String traceId, byte[] body1, byte[] body2) {
+    public static String flushResult(byte[] body1, byte[] body2) {
+        // 计算 traceId 长度
+        int traceIdLength = 14;
+        while (body1[traceIdLength] != Constant.LOG_SEPARATOR) {
+            traceIdLength++;
+        }
+        // log.info(traceIdLength + "");
+
+        int length1 = body1.length, length2 = body2.length, total = length1 + length2;
+        int index = 0;
+        byte[] body = new byte[total];
+        int startOffset1 = 0, startOffset2 = 0;
+
+        // 归并排序
+        while (startOffset1 < length1 && startOffset2 < length2) {
+            /*
+            for (int i = 0; i < 16; i++) {
+                byte b1 = body1[startOffset1 + traceIdLength + 1 + i];
+                System.out.print((char) (int) b1);
+            }
+            System.out.print("-");
+
+            for (int i = 0; i < 16; i++) {
+                byte b2 = body2[startOffset2 + traceIdLength + 1 + i];
+                System.out.print((char) (int) b2);
+            }
+            System.out.println();
+            */
+            for (int i = 0; i < 16; i++) {
+                byte b1 = body1[startOffset1 + traceIdLength + 1 + i];
+                byte b2 = body2[startOffset2 + traceIdLength + 1 + i];
+
+//                System.out.print((char) (int) b1 + "_" + (char) (int) b2 + " ");
+                if (b1 == b2) {
+                    continue;
+                }
+                if (b1 < b2) {
+                    while (body1[startOffset1] != Constant.LINE_SEPARATOR) {
+                        body[index++] = body1[startOffset1++];
+                    }
+                    body[index++] = body1[startOffset1++];
+                    break;
+                }
+                if (b1 > b2) {
+                    while (body2[startOffset2] != Constant.LINE_SEPARATOR) {
+                        body[index++] = body2[startOffset2++];
+                    }
+                    body[index++] = body2[startOffset2++];
+                    break;
+                }
+            }
+            // log.info(String.format("%d-%d", startOffset1, endOffset1));
+        }
+
+        while (startOffset1 < length1) {
+            body[index++] = body1[startOffset1++];
+        }
+
+        while (startOffset2 < length2) {
+            body[index++] = body2[startOffset2++];
+        }
+
+        body[total - 1] = '\n';
+        // System.out.println("Result: \n" + new String(body));
+        return MD5Util.byteToMD5(body);
+    }
+
+    // http 调用上传接口
+    public static void uploadData() {
+        log.info("Server start upload data...");
+        String result = null;
+        try {
+            result = JSON.toJSONString(resultMap);
+            RequestBody body = new FormBody.Builder()
+                    .add("result", result).build();
+            String url = String.format("http://localhost:%s/api/finished", CommonController.getDataSourcePort());
+            Request request = new Request.Builder().url(url).post(body).build();
+            Response response = HttpUtil.callHttp(request);
+            if (response.isSuccessful()) {
+                response.close();
+                log.warn("Server success to sendCheckSum, result.");
+                return;
+            }
+            log.warn("fail to sendCheckSum:" + response.message());
+            response.close();
+        } catch (Exception e) {
+            log.warn("fail to call finish", e);
+        }
+        log.info("Server data upload success...");
+        log.info(result);
+    }
+
+    public static void flushResult(byte[] bytes) {
+    }
+
+    @Override
+    public void run() {
+        try {
+            startNetty();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+/*
+    public static String flushResult1(byte[] body1, byte[] body2) {
         String[] span1 = new String(body1).split("\n");
         String[] span2 = new String(body2).split("\n");
         int length = span1.length + span2.length;
@@ -140,12 +245,13 @@ public class ServerService implements Runnable {
 //                System.out.print((char) (int) body[i] +  " ");
 //            }
 //        }
-        resultMap.put(traceId, md5);
-        mergeMap.remove(traceId);
+//        resultMap.put(traceId, md5);
+//        mergeMap.remove(traceId);
+        return md5;
     }
+*/
 
-    // 结果转移 + 刷盘
-    public static void flushResult(String traceId, byte[] bytes) {
+    public static String flushResult3(byte[] bytes) {
         String[] spans = new String(bytes).split("\n");
 
 //        for (int i = 0; i < spans.length; i++) {
@@ -181,39 +287,8 @@ public class ServerService implements Runnable {
 //                System.out.print((char) (int) body[i] +  " ");
 //            }
 //        }
-        resultMap.put(traceId, md5);
+//        resultMap.put(traceId, md5);
         // mergeMap.remove(traceId);
-    }
-
-    // http 调用上传接口
-    public static void uploadData() {
-        log.info("Server start upload data...");
-        try {
-            String result = JSON.toJSONString(resultMap);
-            RequestBody body = new FormBody.Builder()
-                    .add("result", result).build();
-            String url = String.format("http://localhost:%s/api/finished", CommonController.getDataSourcePort());
-            Request request = new Request.Builder().url(url).post(body).build();
-            Response response = HttpUtil.callHttp(request);
-            if (response.isSuccessful()) {
-                response.close();
-                log.warn("Server success to sendCheckSum, result.");
-                return;
-            }
-            log.warn("fail to sendCheckSum:" + response.message());
-            response.close();
-        } catch (Exception e) {
-            log.warn("fail to call finish", e);
-        }
-        log.info("Server data upload success...");
-    }
-
-    @Override
-    public void run() {
-        try {
-            startNetty();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        return md5;
     }
 }
