@@ -133,8 +133,8 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
                         buffer.append((char) (int) body[i]);
                     }
                     String traceId = buffer.toString();
-                    // String md5 = MD5Util.byteToMD5(entry.getValue());
-                    String md5 = ServerService.flushResult3(entry.getValue());
+                    String md5 = MD5Util.byteToMD5(entry.getValue());
+                    // String md5 = ServerService.flushResult3(entry.getValue());
                     resultMap.put(traceId, md5);
                     // log.info(new String(entry.getValue()));
                     iterator.remove();

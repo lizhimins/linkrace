@@ -21,7 +21,7 @@ export BASE_DIR=$(dirname $0)/..
 # JVM Configuration
 #===========================================================================================
 JAVA_OPT="${JAVA_OPT} -Dserver.port=${SERVER_PORT}"
-JAVA_OPT="${JAVA_OPT} -Xcomp -XX:PretenureSizeThreshold=64K -XX:+AggressiveOpts -XX:+UseFastAccessorMethods -XX:+DoEscapeAnalysis"
+JAVA_OPT="${JAVA_OPT} -XX:PretenureSizeThreshold=64K -XX:+AggressiveOpts -XX:+UseFastAccessorMethods"
 JAVA_OPT="${JAVA_OPT} -server -Xmx3392M -Xms3392M -Xmn960M -XX:MaxMetaspaceSize=256M -XX:MetaspaceSize=256M"
 #JAVA_OPT="${JAVA_OPT} -XX:+UseConcMarkSweepGC -XX:+UseCMSCompactAtFullCollection -XX:CMSInitiatingOccupancyFraction=70 -XX:+CMSParallelRemarkEnabled -XX:SoftRefLRUPolicyMSPerMB=0 -XX:+CMSClassUnloadingEnabled -XX:SurvivorRatio=8  -XX:-UseParNewGC"
 JAVA_OPT="${JAVA_OPT} -XX:+UseG1GC -XX:G1HeapRegionSize=16m -XX:G1ReservePercent=25 -XX:InitiatingHeapOccupancyPercent=30 -XX:SoftRefLRUPolicyMSPerMB=0 -XX:SurvivorRatio=8"
