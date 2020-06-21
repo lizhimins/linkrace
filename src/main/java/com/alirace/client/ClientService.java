@@ -6,6 +6,7 @@ import io.netty.handler.codec.http.HttpHeaderNames;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -203,17 +204,20 @@ public class ClientService extends Thread {
 
     @Override
     public void run() {
+        long start = System.currentTimeMillis();
+
         try {
             pullData();
             ClientMonitor.printStatus();
             long syncValue = NumberUtil.combineInt2Long(threadId, Integer.MAX_VALUE);
             NettyClient.sendSync(syncValue);
             NettyClient.finish("\n".getBytes());
-            // NettyClient.wait("".getBytes());
-            // NettyClient.finish("".getBytes());
         } catch (Exception e) {
             e.printStackTrace();
         }
+
+        long end = System.currentTimeMillis();
+        log.info("It cost time: " + (end - start) + " ms.");
     }
 
     // BIO 读取数据
@@ -225,6 +229,7 @@ public class ClientService extends Thread {
         String range = String.format("bytes=%d-%d", start, finish);
         httpConnection.setRequestProperty(HttpHeaderNames.RANGE.toString(), range);
         InputStream input = httpConnection.getInputStream();
+        // BufferedInputStream bufferedInputStream = new BufferedInputStream(input, 1024 * 1024);
 
         // 读入一小段数据
         int readByteCount;
@@ -315,15 +320,23 @@ public class ClientService extends Thread {
             }
         }
 
-        for (int i = windowIndex; i < windowIndex + WINDOW_SIZE; i++) {
-            int now = i % 20000;
-            int preLineId = (int) (window[now] >> 32);
-            int preLength = (int) window[now];
-            int nowlength = (int) offsetStatus[preLineId];
-            if (preLength == nowlength) {
-                if (threadId != 0) {
+        if (threadId != 0) {
+            for (int i = windowIndex; i < windowIndex + WINDOW_SIZE; i++) {
+                int now = i % 20000;
+                int preLineId = (int) (window[now] >> 32);
+                int preLength = (int) window[now];
+                int nowlength = (int) offsetStatus[preLineId];
+                if (preLength == nowlength) {
                     queryAndUpload(preLineId);
-                } else {
+                }
+            }
+        } else {
+            for (int i = windowIndex; i < windowIndex + WINDOW_SIZE; i++) {
+                int now = i % 20000;
+                int preLineId = (int) (window[now] >> 32);
+                int preLength = (int) window[now];
+                int nowlength = (int) offsetStatus[preLineId];
+                if (preLength == nowlength) {
                     int startPos = (int) (offset[preLineId][0] >> 32);
                     byte[] traceId = new byte[16];
                     int index = 0;
@@ -337,6 +350,8 @@ public class ClientService extends Thread {
             }
         }
 
+
+//        bufferedInputStream.close();
         input.close();
         httpConnection.disconnect();
         log.info("Client pull data finish...");
@@ -562,7 +577,7 @@ public class ClientService extends Thread {
         while (readBlockTimes - otherBlockTimes > 64) {
             TimeUnit.MILLISECONDS.sleep(1);
         }
-        if (readBlockTimes % 16 == 0) {
+        if (readBlockTimes % 4 == 0) {
             long syncValue = NumberUtil.combineInt2Long(threadId, readBlockTimes);
             NettyClient.sendSync(syncValue);
         }

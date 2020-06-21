@@ -2,9 +2,8 @@ package com.alirace.controller;
 
 import com.alirace.Application;
 import com.alirace.client.ClientService;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import com.alirace.util.HttpUtil;
+import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
@@ -20,7 +19,7 @@ public class CommonController {
     public static volatile AtomicBoolean isReady = new AtomicBoolean(false);
     private static Integer DATA_SOURCE_PORT = 8002;
     private static AtomicBoolean isBeginning = new AtomicBoolean(false);
-    private static String result;
+    private static String json;
 
     public static void setReady() {
 //        try {
@@ -46,10 +45,10 @@ public class CommonController {
             }
         }
         if (CLIENT_PROCESS_PORT1.equals(port)) {
-            return "http://localhost:" + CommonController.getDataSourcePort() + "/trace1.data";
+            return "http://127.0.0.1:" + CommonController.getDataSourcePort() + "/trace1.data";
         }
         if (CLIENT_PROCESS_PORT2.equals(port)) {
-            return "http://localhost:" + CommonController.getDataSourcePort() + "/trace2.data";
+            return "http://127.0.0.1:" + CommonController.getDataSourcePort() + "/trace2.data";
         }
         return null;
     }
@@ -65,7 +64,7 @@ public class CommonController {
     }
 
     @RequestMapping("/setParameter")
-    public String setParamter(@RequestParam Integer port) throws IOException, InterruptedException, URISyntaxException {
+    public String setParamter(@RequestParam Integer port) throws IOException {
         DATA_SOURCE_PORT = port;
         if (isBeginning.compareAndSet(false, true)) {
             // 开始读入数据
@@ -73,15 +72,23 @@ public class CommonController {
                 // 放入文件地址
                 ClientService.setPathAndPull(getPath());
             }
+
+            if (Application.isBackendProcess()) {
+                HttpUtil.init();
+            }
         }
         return "suc";
     }
 
-    @RequestMapping("/api/finish")
-    public String callFinish(@RequestParam String json) {
-        if (result == null) {
-            result = json;
-        }
+    @PostMapping(value = "/api/finish")
+    public String callFinish(@RequestBody String result) {
+        System.out.println("result:" + result);
+        json = result;
         return result;
+    }
+
+    @GetMapping(value = "/result")
+    public String callFinish() {
+        return json;
     }
 }

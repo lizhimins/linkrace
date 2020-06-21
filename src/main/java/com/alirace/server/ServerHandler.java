@@ -3,10 +3,12 @@ package com.alirace.server;
 import com.alirace.controller.CommonController;
 import com.alirace.model.Message;
 import com.alirace.model.MessageType;
+import com.alirace.util.HttpUtil;
 import com.alirace.util.MD5Util;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.group.ChannelGroup;
@@ -23,6 +25,7 @@ import static com.alirace.server.ServerService.*;
 /**
  * 数据合并处理器
  */
+@ChannelHandler.Sharable
 public class ServerHandler extends SimpleChannelInboundHandler<Object> {
 
     /**
@@ -97,7 +100,8 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
             byte[] result = mergeMap.get(traceId);
             if (result != null) {
                 String md5 = flushResult(body, result);
-                resultMap.put(traceId, md5);
+                // resultMap.put(traceId, md5);
+                HttpUtil.post(traceId, md5);
                 mergeMap.remove(traceId);
             }
         }
@@ -135,7 +139,8 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
                     String traceId = buffer.toString();
                     String md5 = MD5Util.byteToMD5(entry.getValue());
                     // String md5 = ServerService.flushResult3(entry.getValue());
-                    resultMap.put(traceId, md5);
+                    // resultMap.put(traceId, md5);
+                    HttpUtil.post(traceId, md5);
                     // log.info(new String(entry.getValue()));
                     iterator.remove();
                 }

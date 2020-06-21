@@ -211,24 +211,26 @@ public class ServerService implements Runnable {
         log.info("Server start upload data...");
         String result = null;
         try {
-            result = JSON.toJSONString(resultMap);
-            RequestBody body = new FormBody.Builder()
-                    .add("result", result).build();
-            String url = String.format("http://localhost:%s/api/finished", CommonController.getDataSourcePort());
-            Request request = new Request.Builder().url(url).post(body).build();
-            Response response = HttpUtil.callHttp(request);
-            if (response.isSuccessful()) {
-                response.close();
-                log.warn("Server success to sendCheckSum, result.");
-                return;
-            }
-            log.warn("fail to sendCheckSum:" + response.message());
-            response.close();
+            // result = JSON.toJSONString(resultMap);
+            // RequestBody body = new FormBody.Builder().add("result", result).build();
+            // String url = String.format("http://localhost:%s/api/finished", CommonController.getDataSourcePort());
+            // Request request = new Request.Builder().url(url).post(body).build();
+            // Response response = HttpUtil.callHttp(request);
+            // if (response.isSuccessful()) {
+            //     response.close();
+            //     log.warn("Server success to sendCheckSum, result.");
+            //     return;
+            // }
+            // log.warn("fail to sendCheckSum:" + response.message());
+            // response.close();
+            // HttpUtil.post(result);
+            HttpUtil.postEOF();
+            log.warn("Server success to sendCheckSum, result.");
         } catch (Exception e) {
             log.warn("fail to call finish", e);
         }
         log.info("Server data upload success...");
-        log.info(result);
+        // log.info(JSON.toJSONString(resultMap));
     }
 
     public static void flushResult(byte[] bytes) {
