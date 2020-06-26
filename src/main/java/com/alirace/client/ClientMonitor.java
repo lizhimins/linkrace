@@ -12,7 +12,6 @@ public class ClientMonitor implements Runnable {
     private static final Logger log = LoggerFactory.getLogger(ClientMonitor.class);
 
     // 错误总数
-    public static AtomicInteger errorCount = new AtomicInteger(0);
     public static AtomicInteger uploadCount = new AtomicInteger(0);
     public static AtomicInteger queryCount = new AtomicInteger(0);
     public static AtomicInteger responseCount = new AtomicInteger(0);
@@ -31,10 +30,10 @@ public class ClientMonitor implements Runnable {
 //                // ClientService.services[1].errorCount,
 //                errorCount.get()));
 
-        sb.append(String.format("ERROR: %6d, %6d, %6d ",
-                ClientService.services[0].errorCount,
-                ClientService.services[1].errorCount,
-                errorCount.get()));
+        int e1 = ClientService.services[0].errorCount;
+        //int e2 = ClientService.services[1].errorCount;
+        int e2 = 0;
+        sb.append(String.format("ERROR: %6d %6d %6d, ", e1, e2, e1 + e2));
 
         sb.append(String.format("UPLOAD: %6d, ", uploadCount.get()));
         sb.append(String.format("QUERY: %6d, ", queryCount.get()));
