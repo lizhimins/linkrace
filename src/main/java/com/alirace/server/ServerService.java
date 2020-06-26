@@ -9,7 +9,6 @@ import com.alirace.netty.MyEncoder;
 import com.alirace.util.HttpUtil;
 import com.alirace.util.MD5Util;
 import io.netty.bootstrap.ServerBootstrap;
-import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
@@ -19,17 +18,14 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.openjdk.jmh.annotations.Benchmark;
-import org.openjdk.jmh.annotations.Mode;
-import org.openjdk.jmh.runner.Runner;
 import org.openjdk.jmh.runner.RunnerException;
-import org.openjdk.jmh.runner.options.Options;
-import org.openjdk.jmh.runner.options.OptionsBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class ServerService implements Runnable {
@@ -76,7 +72,7 @@ public class ServerService implements Runnable {
         thread.start();
 
 
-//        TimeUnit.MILLISECONDS.sleep(5500);
+        TimeUnit.MILLISECONDS.sleep(60000);
 //        Iterator<Map.Entry<String, byte[]>> iterator = mergeMap.entrySet().iterator();
 //        while (iterator.hasNext()) {
 //            Map.Entry<String, byte[]> entry = iterator.next();
@@ -85,7 +81,7 @@ public class ServerService implements Runnable {
 //            flushResult(key, value);
 //            iterator.remove();
 //        }
-//        uploadData();
+        uploadData();
     }
 
     public static void startNetty() throws Exception {
@@ -211,26 +207,24 @@ public class ServerService implements Runnable {
         log.info("Server start upload data...");
         String result = null;
         try {
-            // result = JSON.toJSONString(resultMap);
-            // RequestBody body = new FormBody.Builder().add("result", result).build();
-            // String url = String.format("http://localhost:%s/api/finished", CommonController.getDataSourcePort());
-            // Request request = new Request.Builder().url(url).post(body).build();
-            // Response response = HttpUtil.callHttp(request);
-            // if (response.isSuccessful()) {
-            //     response.close();
-            //     log.warn("Server success to sendCheckSum, result.");
-            //     return;
-            // }
-            // log.warn("fail to sendCheckSum:" + response.message());
-            // response.close();
-            // HttpUtil.post(result);
-            HttpUtil.postEOF();
-            log.warn("Server success to sendCheckSum, result.");
+             result = JSON.toJSONString(resultMap);
+             RequestBody body = new FormBody.Builder().add("result", result).build();
+             String url = String.format("http://localhost:%s/api/finished", CommonController.getDataSourcePort());
+             Request request = new Request.Builder().url(url).post(body).build();
+             Response response = HttpUtil.callHttp(request);
+             if (response.isSuccessful()) {
+                 response.close();
+                 log.warn("Server success to sendCheckSum, result.");
+                 return;
+             }
+             log.warn("fail to sendCheckSum:" + response.message());
+             response.close();
+             log.warn("Server success to sendCheckSum, result.");
         } catch (Exception e) {
             log.warn("fail to call finish", e);
         }
         log.info("Server data upload success...");
-        // log.info(JSON.toJSONString(resultMap));
+        log.info(JSON.toJSONString(resultMap));
     }
 
     public static void flushResult(byte[] bytes) {

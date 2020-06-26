@@ -6,6 +6,9 @@ public class Constant {
     public static final byte LOG_SEPARATOR = (byte) '|';
     public static final byte LINE_SEPARATOR = (byte) '\n';
 
+    public static final byte[] HTTP_STATUS_CODE = "http.status_code=200".getBytes();
+    public static final byte[] ERROR_EQUAL_1 = "error=1".getBytes();
+
     public static final int BYTES_LENGTH = (512 * 1024 * 1024) / nThreads;
     public static final int LENGTH_PER_READ = 1024 * 1024; // 每一次读 1M 2.8秒
     public static final int BYTES_SIZE = BYTES_LENGTH + 4 * LENGTH_PER_READ;

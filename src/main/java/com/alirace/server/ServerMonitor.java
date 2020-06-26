@@ -1,5 +1,6 @@
 package com.alirace.server;
 
+import com.alirace.util.HttpUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

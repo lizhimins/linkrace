@@ -1,5 +1,8 @@
 package com.alirace.controller;
 
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.TypeReference;
+import com.alibaba.fastjson.parser.Feature;
 import com.alirace.Application;
 import com.alirace.client.ClientService;
 import com.alirace.util.HttpUtil;
@@ -7,6 +10,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.util.Iterator;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.alirace.Application.CLIENT_PROCESS_PORT1;
@@ -38,10 +43,10 @@ public class CommonController {
         String port = Application.getSystemPort();
         if (System.getProperty("local") != null) {
             if (CLIENT_PROCESS_PORT1.equals(port)) {
-                return "http://10.66.1.107:" + "8004" + "/trace1.data";
+                return "http://47.100.53.20:" + "8004" + "/trace1.data";
             }
             if (CLIENT_PROCESS_PORT2.equals(port)) {
-                return "http://10.66.1.107:" + "8004" + "/trace2.data";
+                return "http://47.100.53.20:" + "8004" + "/trace2.data";
             }
         }
         if (CLIENT_PROCESS_PORT1.equals(port)) {
@@ -73,19 +78,37 @@ public class CommonController {
                 ClientService.setPathAndPull(getPath());
             }
 
-            if (Application.isBackendProcess()) {
-                HttpUtil.init();
-            }
+//            if (Application.isBackendProcess()) {
+//                HttpUtil.init();
+//            }
         }
         return "suc";
     }
 
-    @PostMapping(value = "/api/finish")
-    public String callFinish(@RequestBody String result) {
-        System.out.println("result:" + result);
+    @PostMapping(value = "/api/finished")
+    public String callFinish(@RequestParam String result) {
+        System.out.println(result);
         json = result;
+        Map<String, String> checkSumMap = (Map) JSON.parseObject(result, new TypeReference<Map<String, String>>() {
+        }, new Feature[0]);
+
+        if (checkSumMap == null) {
+            System.out.println("fail: " + result);
+        } else {
+            System.out.println("receive: " + result);
+        }
+
+        Iterator<Map.Entry<String, String>> iterator = checkSumMap.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<String, String> entry = iterator.next();
+            String key = entry.getKey();
+            String value = entry.getValue();
+            System.out.println(key + "->" + value);
+            iterator.remove();
+        }
         return result;
     }
+
 
     @GetMapping(value = "/result")
     public String callFinish() {

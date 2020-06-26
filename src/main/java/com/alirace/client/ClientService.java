@@ -1,19 +1,16 @@
 package com.alirace.client;
 
-import com.alirace.constant.Constant;
 import com.alirace.util.NumberUtil;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.Proxy;
 import java.net.URL;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -33,7 +30,6 @@ public class ClientService extends Thread {
     private static URL url;
     private long startOffset = 0L;
     private long finishOffset = 0L;
-    public long total = 0L;
 
     // 机器同步算法, 防止快机太快
     public int readBlockTimes = 0;
@@ -59,9 +55,6 @@ public class ClientService extends Thread {
     // 滑动窗口, 大小配置为 2万
     private int windowIndex = 0;
     private long[] window = new long[WINDOW_SIZE];
-
-    // 等待区, 保存没有处理到的数据
-    public ConcurrentHashMap<Integer, byte[]> queryArea = new ConcurrentHashMap<>();
 
     public int errorCount = 0;
 
@@ -123,25 +116,48 @@ public class ClientService extends Thread {
 
     // 检查标签中是否包含错误
     private boolean checkTags() {
-        // http.status_code=200\n
-        if (   bytes[nowOffset - 9] == (byte) (int) '_'
-                && bytes[nowOffset - 4] == (byte) (int) '=') {
-            if (!(bytes[nowOffset - 3] == (byte) (int) '2'
-                    && bytes[nowOffset - 2] == (byte) (int) '0'
-                    && bytes[nowOffset - 1] == (byte) (int) '0')
+        boolean flag = false;
+        while (bytes[nowOffset] != LINE_SEPARATOR) {
+            if (bytes[nowOffset] == HTTP_STATUS_CODE[0]
+                    && bytes[nowOffset + 1] == HTTP_STATUS_CODE[1]
+                    && bytes[nowOffset + 2] == HTTP_STATUS_CODE[2]
+                    && bytes[nowOffset + 3] == HTTP_STATUS_CODE[3]
+                    && bytes[nowOffset + 4] == HTTP_STATUS_CODE[4]
+                    && bytes[nowOffset + 5] == HTTP_STATUS_CODE[5]
+                    && bytes[nowOffset + 6] == HTTP_STATUS_CODE[6]
+                    && bytes[nowOffset + 7] == HTTP_STATUS_CODE[7]
+                    && bytes[nowOffset + 8] == HTTP_STATUS_CODE[8]
+                    && bytes[nowOffset + 9] == HTTP_STATUS_CODE[9]
+                    && bytes[nowOffset + 10] == HTTP_STATUS_CODE[10]
+                    && bytes[nowOffset + 11] == HTTP_STATUS_CODE[11]
+                    && bytes[nowOffset + 12] == HTTP_STATUS_CODE[12]
+                    && bytes[nowOffset + 13] == HTTP_STATUS_CODE[13]
+                    && bytes[nowOffset + 14] == HTTP_STATUS_CODE[14]
+                    && bytes[nowOffset + 15] == HTTP_STATUS_CODE[15]
+                    && bytes[nowOffset + 16] == HTTP_STATUS_CODE[16]
             ) {
-                return true;
+                if (!(bytes[nowOffset + 17] == HTTP_STATUS_CODE[17]
+                        && bytes[nowOffset + 18] == HTTP_STATUS_CODE[18]
+                        && bytes[nowOffset + 19] == HTTP_STATUS_CODE[19])
+                ) {
+                    flag = true;
+                    break;
+                }
             }
+
+            if (bytes[nowOffset] == ERROR_EQUAL_1[0]
+                    && bytes[nowOffset + 1] == ERROR_EQUAL_1[1]
+                    && bytes[nowOffset + 2] == ERROR_EQUAL_1[2]
+                    && bytes[nowOffset + 3] == ERROR_EQUAL_1[3]
+                    && bytes[nowOffset + 4] == ERROR_EQUAL_1[4]
+                    && bytes[nowOffset + 5] == ERROR_EQUAL_1[5]
+                    && bytes[nowOffset + 6] == ERROR_EQUAL_1[6]) {
+                flag = true;
+                break;
+            }
+            nowOffset++;
         }
-        // error=1\n
-        if (   bytes[nowOffset - 4] == (byte) (int) 'o'
-                && bytes[nowOffset - 3] == (byte) (int) 'r'
-                && bytes[nowOffset - 2] == (byte) (int) '='
-                && bytes[nowOffset - 1] == (byte) (int) '1'
-        ) {
-            return true;
-        }
-        return false;
+        return flag;
     }
 
     // 每处理一条日志, 就需要调用一次这个函数
@@ -152,8 +168,21 @@ public class ClientService extends Thread {
         // 查询行号: traceId -> nowLine
         int nowLine = queryLineIndex();
 
-        // 跳过一大段数据
-        nowOffset += 110;
+        while (bytes[nowOffset] != LOG_SEPARATOR) {
+            nowOffset++;
+        }
+
+        // 处理时间戳, spanId
+        nowOffset += 1 + 16 + 1 + 14;
+
+        // 滑过中间部分
+        int sep = 0;
+        while (sep < 6) {
+            if (bytes[nowOffset] == LOG_SEPARATOR) {
+                sep++;
+            }
+            nowOffset++;
+        }
 
         // 处理到末尾
         while (bytes[nowOffset] != LINE_SEPARATOR) {
@@ -199,7 +228,6 @@ public class ClientService extends Thread {
 
         // 最后一个符号是 \n
         nowOffset++;
-        total += nowOffset - preOffset;
     }
 
     @Override
@@ -233,7 +261,7 @@ public class ClientService extends Thread {
 
         // 读入一小段数据
         int readByteCount;
-        for (int i = 0; i < 32; i++) {
+        for (int i = 0; i < 1; i++) {
             readByteCount = input.read(bytes, logOffset, LENGTH_PER_READ);
             logOffset += readByteCount;
         }
@@ -246,7 +274,6 @@ public class ClientService extends Thread {
                 nowOffset++;
             }
             nowOffset++;
-            total = nowOffset; // 计数
 
             while (nowOffset < CROSS_RANGE * 2) {
                 // 左指针 = 当前指针
@@ -255,6 +282,7 @@ public class ClientService extends Thread {
                 // 查询行号: traceId -> nowLine
                 int nowLine = queryLineIndex();
 
+                log.info(nowLine + " ");
                 // 跳过一大段数据
                 nowOffset += 110;
 
@@ -284,14 +312,13 @@ public class ClientService extends Thread {
 
                 // 最后一个符号是 \n
                 nowOffset++;
-                total += nowOffset - preOffset;
             }
         }
 
         while (true) {
             // 读入一小段数据
             readByteCount = input.read(bytes, logOffset, LENGTH_PER_READ);
-            syncBlock();
+            // syncBlock();
 
             // 文件结束退出
             if (readByteCount == -1) {
@@ -371,11 +398,9 @@ public class ClientService extends Thread {
             }
             if (status == 0x00000100) {
                 NettyClient.response(body);
-                queryArea.remove(lineId);
             }
             if (status == 0x00000101) {
                 NettyClient.response(body);
-                queryArea.remove(lineId);
                 // response("\r".getBytes());
             }
             // log.info(new String(body));
@@ -456,7 +481,6 @@ public class ClientService extends Thread {
             buckets[bucketIndex][depth] = NumberUtil.combineInt2Long(lineId, hash); // 保存 traceId
             bucketStatus[bucketIndex]++; // hash 数量+1
             offsetStatus[lineId] |= ((0x1L) << 40); // 标记为需要被动上传
-            queryArea.put(lineId, traceId);
         } else {
             // log.info(new String(traceId) + " existent");
             // offsetStatus[lineId] |= ((0x1L) << 40); // 标记为需要被动上传

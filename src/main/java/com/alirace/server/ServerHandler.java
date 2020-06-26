@@ -68,6 +68,7 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
             if (result != null) {
                 String md5 = flushResult(body, result);
                 resultMap.put(traceId, md5);
+                // HttpUtil.post(traceId, md5);
                 mergeMap.remove(traceId);
             }
             return;
@@ -100,8 +101,8 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
             byte[] result = mergeMap.get(traceId);
             if (result != null) {
                 String md5 = flushResult(body, result);
-                // resultMap.put(traceId, md5);
-                HttpUtil.post(traceId, md5);
+                resultMap.put(traceId, md5);
+                // HttpUtil.post(traceId, md5);
                 mergeMap.remove(traceId);
             }
         }
@@ -139,8 +140,8 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
                     String traceId = buffer.toString();
                     String md5 = MD5Util.byteToMD5(entry.getValue());
                     // String md5 = ServerService.flushResult3(entry.getValue());
-                    // resultMap.put(traceId, md5);
-                    HttpUtil.post(traceId, md5);
+                    resultMap.put(traceId, md5);
+                    // HttpUtil.post(traceId, md5);
                     // log.info(new String(entry.getValue()));
                     iterator.remove();
                 }
