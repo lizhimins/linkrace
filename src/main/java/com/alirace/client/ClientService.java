@@ -119,50 +119,36 @@ public class ClientService extends Thread {
 
     // 检查标签中是否包含错误
     private boolean checkTags() {
-        while (bytes[nowOffset] != LINE_SEPARATOR) {
-            if (       bytes[nowOffset]      == HTTP_STATUS_CODE[0]
-                    && bytes[nowOffset + 1]  == HTTP_STATUS_CODE[1]
-                    && bytes[nowOffset + 2]  == HTTP_STATUS_CODE[2]
-                    && bytes[nowOffset + 3]  == HTTP_STATUS_CODE[3]
-                    && bytes[nowOffset + 4]  == HTTP_STATUS_CODE[4]
-                    && bytes[nowOffset + 5]  == HTTP_STATUS_CODE[5]
-                    && bytes[nowOffset + 6]  == HTTP_STATUS_CODE[6]
-                    && bytes[nowOffset + 7]  == HTTP_STATUS_CODE[7]
-                    && bytes[nowOffset + 8]  == HTTP_STATUS_CODE[8]
-                    && bytes[nowOffset + 9]  == HTTP_STATUS_CODE[9]
-                    && bytes[nowOffset + 10] == HTTP_STATUS_CODE[10]
-                    && bytes[nowOffset + 11] == HTTP_STATUS_CODE[11]
-                    && bytes[nowOffset + 12] == HTTP_STATUS_CODE[12]
-                    && bytes[nowOffset + 13] == HTTP_STATUS_CODE[13]
-                    && bytes[nowOffset + 14] == HTTP_STATUS_CODE[14]
-                    && bytes[nowOffset + 15] == HTTP_STATUS_CODE[15]
-                    && bytes[nowOffset + 16] == HTTP_STATUS_CODE[16]
-            ) {
-                if (bytes[nowOffset + 17] != HTTP_STATUS_CODE[17]
-                    || bytes[nowOffset + 18] != HTTP_STATUS_CODE[18]
-                    || bytes[nowOffset + 19] != HTTP_STATUS_CODE[19]
-                ) {
-                    return true;
+        int endIndex = nowOffset;
+        while (true) {
+            // "error=1" :  101 114 114 111 114 61 49
+            if (bytes[endIndex] == 49) {
+                if (bytes[endIndex - 2] == 114) {
+                    if (bytes[endIndex - 6] == 101) {
+                        return true;
+                    }
                 }
             }
 
-            if (       bytes[nowOffset]     == ERROR_EQUAL_1[0]
-                    && bytes[nowOffset + 1] == ERROR_EQUAL_1[1]
-                    && bytes[nowOffset + 2] == ERROR_EQUAL_1[2]
-                    && bytes[nowOffset + 3] == ERROR_EQUAL_1[3]
-                    && bytes[nowOffset + 4] == ERROR_EQUAL_1[4]
-                    && bytes[nowOffset + 5] == ERROR_EQUAL_1[5]
-                    && bytes[nowOffset + 6] == ERROR_EQUAL_1[6]) {
-                return true;
+            // "http.status_code="  :  104 116 116 112 46 115 116 97 116 117 115 95 99 111 100 101 61
+            if (bytes[endIndex] == 61) {
+                if (bytes[endIndex - 16] == 104) {
+                    return bytes[endIndex + 1] != 50 || bytes[endIndex + 2] != 48 || bytes[endIndex + 3] != 48;
+                }
             }
 
-            nowOffset++;
+            if (bytes[endIndex] == 124) {
+                return false;
+            }
+            --endIndex;
         }
-        return false;
     }
 
+    private static int totalSpan = 0;
     // 每处理一条日志, 就需要调用一次这个函数
     private void handleSpan() throws Exception {
+        totalSpan++;
+
         // 左指针 = 当前指针
         preOffset = nowOffset;
 
@@ -171,33 +157,31 @@ public class ClientService extends Thread {
 
         // System.out.println((char) (int) bytes[nowOffset]);
         // 处理时间戳, spanId
-        nowOffset += 1 + 16 + 1 + 11;
+        nowOffset += 110;
 
-        // 滑过中间部分
-        int sep = 0;
-        while (sep < 6) {
-            if (bytes[nowOffset] == LOG_SEPARATOR) {
-                sep++;
-            }
+        while (bytes[nowOffset] != LINE_SEPARATOR) {
             nowOffset++;
         }
-        nowOffset++;
+        // 滑过中间部分
+//        int sep = 0;
+//        while (sep < 6) {
+//            if (bytes[nowOffset] == LOG_SEPARATOR) {
+//                sep++;
+//            }
+//            nowOffset++;
+//        }
+//        nowOffset++;
         // System.out.println((char) (int) bytes[nowOffset]);
 
         // 检查错误
         if (checkTags()) {
-            while (bytes[nowOffset] != LINE_SEPARATOR) {
-                nowOffset++;
-            }
             errorCount++; // 错误数量 + 1
-//            StringBuffer sb = new StringBuffer();
-//            for (int i = preOffset; i < preOffset + 16; i++) {
-//                if (bytes[i] == LOG_SEPARATOR) {
-//                    break;
-//                }
-//                sb.append((char) (int) bytes[i]);
+
+//            for (int i = preOffset; i < nowOffset; i++) {
+//                System.out.print((char) (int) bytes[i]);
 //            }
-//            System.out.println(sb.toString());
+//            System.out.println();
+
             offsetStatus[nowLine] |= (0x1L << 32); // 错误打标
         }
         // log.info(preOffset + "-" + nowOffset);
@@ -235,6 +219,7 @@ public class ClientService extends Thread {
         try {
             pullData();
             ClientMonitor.printStatus();
+            log.info("total: " + totalSpan);
             long syncValue = NumberUtil.combineInt2Long(threadId, Integer.MAX_VALUE);
             NettyClient.sendSync(syncValue);
             NettyClient.finish("\n".getBytes());
@@ -260,24 +245,16 @@ public class ClientService extends Thread {
             // 查询行号: traceId -> nowLine
             int nowLine = queryLineIndex();
 
+            // System.out.println((char) (int) bytes[nowOffset]);
             // 处理时间戳, spanId
-            nowOffset += 1 + 16 + 1 + 11;
+            nowOffset += 110;
 
-            // 滑过中间部分
-            int sep = 0;
-            while (sep < 6) {
-                if (bytes[nowOffset] == LOG_SEPARATOR) {
-                    sep++;
-                }
+            while (bytes[nowOffset] != LINE_SEPARATOR) {
                 nowOffset++;
             }
-            nowOffset++;
 
             // 检查错误
             if (checkTags()) {
-                while (bytes[nowOffset] != LINE_SEPARATOR) {
-                    nowOffset++;
-                }
                 errorCount++; // 错误数量 + 1
                 offsetStatus[nowLine] |= (0x1L << 32); // 错误打标
             }
@@ -320,7 +297,7 @@ public class ClientService extends Thread {
         while (true) {
             // 读入一小段数据
             readByteCount = input.read(bytes, logOffset, LENGTH_PER_READ);
-            syncBlock();
+            // syncBlock();
 
             // 文件结束退出
             if (readByteCount == -1) {
