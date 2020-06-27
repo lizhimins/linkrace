@@ -54,6 +54,10 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
             String traceId = buffer.toString();
             // log.info(traceId);
 
+//            if (traceId.equals("1c2b9d10fde34")) {
+//                System.out.println(new String(body));
+//            }
+
             // 向其他机器广播查询请求
             for (Channel ch : group) {
                 if (ch != channel) {
@@ -91,6 +95,10 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
                 buffer.append((char) (int) body[i]);
             }
             String traceId = buffer.toString();
+
+//            if (traceId.equals("1c2b9d10fde34")) {
+//                System.out.println(new String(body));
+//            }
             // log.error("RECEIVE: " + traceId);
 //            if (message.getLength() < 32) {
 //                ServerService.flushResult(mergeMap.get(traceId));

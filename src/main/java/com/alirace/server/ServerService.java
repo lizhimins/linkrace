@@ -137,7 +137,7 @@ public class ServerService implements Runnable {
 
     public static String flushResult(byte[] body1, byte[] body2) {
         // 计算 traceId 长度
-        int traceIdLength = 14;
+        int traceIdLength = 10;
         while (body1[traceIdLength] != Constant.LOG_SEPARATOR) {
             traceIdLength++;
         }
@@ -199,6 +199,20 @@ public class ServerService implements Runnable {
 
         body[total - 1] = '\n';
         // System.out.println("Result: \n" + new String(body));
+
+//        StringBuffer buffer = new StringBuffer(16);
+//        for (int i = 0; i < 16; i++) {
+//            if (body[i] == (byte) '|') {
+//                break;
+//            }
+//            buffer.append((char) (int) body[i]);
+//        }
+//        String traceId = buffer.toString();
+//
+//        if (traceId.equals("1c2b9d10fde34")) {
+//            System.out.println(new String(body));
+//        }
+
         return MD5Util.byteToMD5(body);
     }
 

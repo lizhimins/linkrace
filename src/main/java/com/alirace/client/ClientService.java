@@ -268,6 +268,10 @@ public class ClientService extends Thread {
             // offset 数组的第一个格子, 高位保存状态, 低位保存数据条数
             offsetStatus[nowLine]++;
 
+            // 循环覆盖写
+            window[windowIndex] = NumberUtil.combineInt2Long(nowLine, (int) (offsetStatus[nowLine]));
+            windowIndex = (windowIndex + 1) % WINDOW_SIZE;
+
             // 最后一个符号是 \n
             nowOffset++;
         }
@@ -297,7 +301,7 @@ public class ClientService extends Thread {
         while (true) {
             // 读入一小段数据
             readByteCount = input.read(bytes, logOffset, LENGTH_PER_READ);
-            // syncBlock();
+            syncBlock();
 
             // 文件结束退出
             if (readByteCount == -1) {
@@ -318,10 +322,10 @@ public class ClientService extends Thread {
             // 如果太长了要从头开始写, 拷贝末尾的数据到头部
             if (logOffset >= BYTES_LENGTH) {
                 for (int i = nowOffset; i <= logOffset; i++) {
-                    bytes[i - nowOffset + CROSS_RANGE * 2] = bytes[i];
+                    bytes[i - nowOffset + CROSS_RANGE * 4] = bytes[i];
                 }
-                logOffset = logOffset - nowOffset + CROSS_RANGE * 2;
-                nowOffset = CROSS_RANGE * 2;
+                logOffset = logOffset - nowOffset + CROSS_RANGE * 4;
+                nowOffset = CROSS_RANGE * 4;
                 // log.info("rewrite");
             }
         }
