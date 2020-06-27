@@ -143,7 +143,7 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
                     resultMap.put(traceId, md5);
                     // HttpUtil.post(traceId, md5);
                     // log.info(new String(entry.getValue()));
-                    iterator.remove();
+                    // iterator.remove();
                 }
                 uploadData();
             }

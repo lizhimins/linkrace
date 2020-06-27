@@ -58,8 +58,6 @@ public class ClientService extends Thread {
 
     public int errorCount = 0;
 
-    public static int total = 0;
-
     // 构造函数
     public ClientService(String name, int threadId) {
         super(name);
@@ -78,7 +76,9 @@ public class ClientService extends Thread {
 //            }
 //            sb.append((char) (int) bytes[i]);
 //        }
-//        System.out.println(sb.toString());
+//        if (threadId == 1) {
+//            System.out.println(sb.toString());
+//        }
 
         // 根据前几位计算桶的编号
         int bucketIndex = 0; byte b;
@@ -163,8 +163,6 @@ public class ClientService extends Thread {
 
     // 每处理一条日志, 就需要调用一次这个函数
     private void handleSpan() throws Exception {
-        total++;
-
         // 左指针 = 当前指针
         preOffset = nowOffset;
 
@@ -183,6 +181,7 @@ public class ClientService extends Thread {
             }
             nowOffset++;
         }
+        nowOffset++;
         // System.out.println((char) (int) bytes[nowOffset]);
 
         // 检查错误
@@ -200,10 +199,6 @@ public class ClientService extends Thread {
 //            }
 //            System.out.println(sb.toString());
             offsetStatus[nowLine] |= (0x1L << 32); // 错误打标
-        }
-
-        while (bytes[nowOffset] != LINE_SEPARATOR) {
-            nowOffset++;
         }
         // log.info(preOffset + "-" + nowOffset);
 
@@ -239,7 +234,6 @@ public class ClientService extends Thread {
 
         try {
             pullData();
-            log.info("TOTAL: " + total);
             ClientMonitor.printStatus();
             long syncValue = NumberUtil.combineInt2Long(threadId, Integer.MAX_VALUE);
             NettyClient.sendSync(syncValue);
@@ -266,12 +260,8 @@ public class ClientService extends Thread {
             // 查询行号: traceId -> nowLine
             int nowLine = queryLineIndex();
 
-            while (bytes[nowOffset] != LOG_SEPARATOR) {
-                nowOffset++;
-            }
-
             // 处理时间戳, spanId
-            nowOffset += 1 + 16 + 1 + 14;
+            nowOffset += 1 + 16 + 1 + 11;
 
             // 滑过中间部分
             int sep = 0;
@@ -285,6 +275,9 @@ public class ClientService extends Thread {
 
             // 检查错误
             if (checkTags()) {
+                while (bytes[nowOffset] != LINE_SEPARATOR) {
+                    nowOffset++;
+                }
                 errorCount++; // 错误数量 + 1
                 offsetStatus[nowLine] |= (0x1L << 32); // 错误打标
             }
@@ -327,7 +320,7 @@ public class ClientService extends Thread {
         while (true) {
             // 读入一小段数据
             readByteCount = input.read(bytes, logOffset, LENGTH_PER_READ);
-            // syncBlock();
+            syncBlock();
 
             // 文件结束退出
             if (readByteCount == -1) {
@@ -348,10 +341,10 @@ public class ClientService extends Thread {
             // 如果太长了要从头开始写, 拷贝末尾的数据到头部
             if (logOffset >= BYTES_LENGTH) {
                 for (int i = nowOffset; i <= logOffset; i++) {
-                    bytes[i - nowOffset] = bytes[i];
+                    bytes[i - nowOffset + CROSS_RANGE * 2] = bytes[i];
                 }
-                logOffset = logOffset - nowOffset;
-                nowOffset = 0;
+                logOffset = logOffset - nowOffset + CROSS_RANGE * 2;
+                nowOffset = CROSS_RANGE * 2;
                 // log.info("rewrite");
             }
         }
@@ -367,23 +360,23 @@ public class ClientService extends Thread {
                 }
             }
         } else {
-//            for (int i = windowIndex; i < windowIndex + WINDOW_SIZE; i++) {
-//                int now = i % 20000;
-//                int preLineId = (int) (window[now] >> 32);
-//                int preLength = (int) window[now];
-//                int nowlength = (int) offsetStatus[preLineId];
-//                if (preLength == nowlength) {
-//                    int startPos = (int) (offset[preLineId][0] >> 32);
-//                    byte[] traceId = new byte[16];
-//                    int index = 0;
-//                    for (int j = 0; j < 16; j++) {
-//                        traceId[j] = bytes[startPos + j];
-//                    }
-//                    int lineId = services[1].queryLineId(traceId);
-//                    // log.info(startPos + " " + lineId);
-//                    services[1].queryAndUpload(lineId);
-//                }
-//            }
+            for (int i = windowIndex; i < windowIndex + WINDOW_SIZE; i++) {
+                int now = i % 20000;
+                int preLineId = (int) (window[now] >> 32);
+                int preLength = (int) window[now];
+                int nowlength = (int) offsetStatus[preLineId];
+                if (preLength == nowlength) {
+                    int startPos = (int) (offset[preLineId][0] >> 32);
+                    byte[] traceId = new byte[16];
+                    int index = 0;
+                    for (int j = 0; j < 16; j++) {
+                        traceId[j] = bytes[startPos + j];
+                    }
+                    int lineId = services[1].queryLineId(traceId);
+                    // log.info(startPos + " " + lineId);
+                    services[1].queryAndUpload(lineId);
+                }
+            }
         }
 
         input.close();
@@ -418,9 +411,9 @@ public class ClientService extends Thread {
 
     public int queryLineId(byte[] traceId) {
         // 根据前几位计算桶的编号
-        int bucketIndex = 0;
+        int bucketIndex = 0; byte b;
         for (int i = 0; i < 5; i++) {
-            byte b = traceId[i];
+            b = traceId[i];
             if ('0' <= b && b <= '9') {
                 bucketIndex = bucketIndex * 16 + ((int) b - '0');
             } else {
@@ -428,14 +421,13 @@ public class ClientService extends Thread {
             }
         }
 
+        // 处理到尾巴
         int hash = 0;
-        for (int i = 5; i < 13; i++) {
-            byte b = traceId[i];
-            if ('0' <= b && b <= '9') {
-                hash = hash * 16 + ((int) b - '0');
-            } else {
-                hash = hash * 16 + ((int) b - 'a') + 10;
+        for (int i = 5; i < 16; i++) {
+            if (traceId[i] == LOG_SEPARATOR) {
+                break;
             }
+            hash = hash * 31 + traceId[i];
         }
 
         // 检测是否已经出现过
@@ -462,14 +454,11 @@ public class ClientService extends Thread {
             }
         }
 
-        int hash = 0;
-        for (int i = 5; i < 13; i++) {
-            byte b = traceId[i];
-            if ('0' <= b && b <= '9') {
-                hash = hash * 16 + ((int) b - '0');
-            } else {
-                hash = hash * 16 + ((int) b - 'a') + 10;
-            }
+        // 处理到尾巴
+        int hash = 0; int k = 5; int length = traceId.length;
+        while (k < length) {
+            hash = hash * 31 + traceId[k];
+            k++;
         }
 
         // 检测是否已经出现过
@@ -623,7 +612,7 @@ public class ClientService extends Thread {
         }
 
         // 监控服务
-        // ClientMonitor.start();
+        ClientMonitor.start();
 
         // 在最后启动 netty 进行通信
         NettyClient.startNetty();

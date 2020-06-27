@@ -5,7 +5,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.LongAdder;
 
 public class ClientMonitor implements Runnable {
 
@@ -31,8 +30,8 @@ public class ClientMonitor implements Runnable {
 //                errorCount.get()));
 
         int e1 = ClientService.services[0].errorCount;
-        //int e2 = ClientService.services[1].errorCount;
-        int e2 = 0;
+        int e2 = ClientService.services[1].errorCount;
+        // int e2 = 0;
         sb.append(String.format("ERROR: %6d %6d %6d, ", e1, e2, e1 + e2));
 
         sb.append(String.format("UPLOAD: %6d, ", uploadCount.get()));

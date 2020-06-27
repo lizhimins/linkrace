@@ -71,7 +71,7 @@ public class NettyClient {
 
         // log.info("UPLOAD -> " + new String(body));
         Message message = new Message(MessageType.UPLOAD.getValue(), body);
-        // future.channel().writeAndFlush(message);
+        future.channel().writeAndFlush(message);
     }
 
     // 查询响应

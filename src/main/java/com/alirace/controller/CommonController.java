@@ -87,7 +87,7 @@ public class CommonController {
 
     @PostMapping(value = "/api/finished")
     public String callFinish(@RequestParam String result) {
-        System.out.println(result);
+        // System.out.println(result);
         json = result;
         Map<String, String> checkSumMap = (Map) JSON.parseObject(result, new TypeReference<Map<String, String>>() {
         }, new Feature[0]);
@@ -103,7 +103,7 @@ public class CommonController {
             Map.Entry<String, String> entry = iterator.next();
             String key = entry.getKey();
             String value = entry.getValue();
-            System.out.println(key + "->" + value);
+            // System.out.println(key + "->" + value);
             iterator.remove();
         }
         return result;
