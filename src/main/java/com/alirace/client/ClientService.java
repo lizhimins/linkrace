@@ -116,8 +116,45 @@ public class ClientService extends Thread {
         return line;
     }
 
-    // 检查标签中是否包含错误
     private boolean checkTags() {
+        int endIndex = bytes[nowOffset] == 38 ? nowOffset - 2 : nowOffset - 1;
+
+        byte tmp;
+        // & 38        | 124
+        while (true) {
+            tmp = bytes[endIndex - 7];
+            if (tmp == 38 || tmp == 124) {
+                return true;
+            }
+            tmp = bytes[endIndex - 20];
+            if ((tmp == 38 || tmp == 124) && bytes[endIndex - 19] == 104) {
+                return bytes[endIndex - 2] != 50;
+            }
+            if (bytes[endIndex] == 38) {
+                endIndex = endIndex - 1;
+                continue;
+            }
+
+            // ?id=    63 105 100 61
+            if (bytes[endIndex - 4] == 63) {
+                endIndex -= 43;
+            } else {
+                endIndex -= 10;
+            }
+
+            while (true) {
+                tmp = bytes[endIndex--];
+                if (tmp == 38) {
+                    break;
+                } else if (tmp == 124) {
+                    return false;
+                }
+            }
+        }
+    }
+    
+    // 检查标签中是否包含错误
+    private boolean checkTags1() {
         int endIndex = nowOffset;
         while (true) {
             // "error=1" :  101 114 114 111 114 61 49
@@ -300,7 +337,7 @@ public class ClientService extends Thread {
         while (true) {
             // 读入一小段数据
             readByteCount = input.read(bytes, logOffset, LENGTH_PER_READ);
-            syncBlock();
+            // syncBlock();
 
             // 文件结束退出
             if (readByteCount == -1) {
@@ -592,7 +629,7 @@ public class ClientService extends Thread {
         }
 
         // 监控服务
-        // ClientMonitor.start();
+        ClientMonitor.start();
 
         // 在最后启动 netty 进行通信
         NettyClient.startNetty();
