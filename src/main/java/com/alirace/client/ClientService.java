@@ -574,7 +574,7 @@ public class ClientService extends Thread {
 
     public void syncBlock() throws InterruptedException {
         readBlockTimes++;
-        while (readBlockTimes - otherBlockTimes > 64) {
+        while (readBlockTimes - otherBlockTimes > SYNC_GAP) {
             TimeUnit.MILLISECONDS.sleep(1);
         }
         if (readBlockTimes % 4 == 0) {

@@ -11,6 +11,7 @@ public class Constant {
 
     public static final int PRE_DOWNLOAD_LENGTH = 32 * 1024 * 1024;
     public static final int BYTES_LENGTH = (512 * 1024 * 1024) / nThreads;
+    public static final int SYNC_GAP = 64;
     public static final int LENGTH_PER_READ = 1024 * 1024; // 每一次读 1M 2.8秒
     public static final int CROSS_RANGE = 8 * 1024 * 1024; // 交叉区 8Ms
     public static final int BYTES_SIZE = BYTES_LENGTH + 16 * 1024 * 1024;

@@ -45,10 +45,10 @@ public class ServerService implements Runnable {
     public static HashMap<String, String> resultMap = new HashMap(MAX_HASHMAP_SIZE);
 
     // 发出的查询数量 和 收到的响应数量, 需要支持并发
-    public static AtomicInteger queryRequestCount = new AtomicInteger(0);
-    public static AtomicInteger queryResponseCount = new AtomicInteger(0);
-    public static AtomicInteger finishCount = new AtomicInteger(0);
-    public static AtomicInteger doneCount = new AtomicInteger(0);
+    public static int queryRequestCount = 0;
+    public static int queryResponseCount = 0;
+    public static int finishCount = 0;
+    public static int doneCount = 0;
 
     // 监听的端口号
     private static int PORT = 8003;

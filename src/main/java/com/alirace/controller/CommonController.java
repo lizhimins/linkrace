@@ -103,7 +103,6 @@ public class CommonController {
             Map.Entry<String, String> entry = iterator.next();
             String key = entry.getKey();
             String value = entry.getValue();
-
             iterator.remove();
         }
         return result;
