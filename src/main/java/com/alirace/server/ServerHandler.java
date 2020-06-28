@@ -54,14 +54,14 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
             String traceId = buffer.toString();
             // log.info(traceId);
 
-//            if (traceId.equals("1c2b9d10fde34")) {
-//                System.out.println(new String(body));
-//            }
+            // if (traceId.equals("1c2b9d10fde34")) {
+            //     System.out.println(new String(body));
+            // }
 
             // 向其他机器广播查询请求
             for (Channel ch : group) {
                 if (ch != channel) {
-                    queryRequestCount.incrementAndGet();
+                    queryRequestCount++;
                     Message query = new Message(MessageType.QUERY.getValue(), traceId.getBytes());
                     ch.writeAndFlush(query);
                 }
@@ -72,14 +72,14 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
             if (result != null) {
                 String md5 = flushResult(body, result);
                 resultMap.put(traceId, md5);
-                // HttpUtil.post(traceId, md5);
+                // ServerService.addResult(traceId, md5);
                 mergeMap.remove(traceId);
             }
             return;
         }
 
         if (MessageType.RESPONSE.getValue() == message.getType()) {
-            queryResponseCount.incrementAndGet();
+            queryResponseCount++;
             byte[] body = message.getBody();
             // 空数据直接退出
             if (body[0] == '\n' || body[0] == '\r') {
@@ -110,7 +110,7 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
             if (result != null) {
                 String md5 = flushResult(body, result);
                 resultMap.put(traceId, md5);
-                // HttpUtil.post(traceId, md5);
+                // ServerService.addResult(traceId, md5);
                 mergeMap.remove(traceId);
             }
         }
@@ -125,7 +125,7 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
         }
 
         if (MessageType.FINISH.getValue() == message.getType()) {
-            if (finishCount.incrementAndGet() == 4) {
+            if (++finishCount == 4) {
                 for (Channel ch : group) {
                     ch.writeAndFlush(message);
                 }
@@ -133,7 +133,7 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
         }
 
         if (MessageType.DONE.getValue() == message.getType()) {
-            if (doneCount.incrementAndGet() == 2) {
+            if (++doneCount == 2) {
                 Iterator<Map.Entry<String, byte[]>> iterator = mergeMap.entrySet().iterator();
                 while (iterator.hasNext()) {
                     Map.Entry<String, byte[]> entry = iterator.next();
@@ -176,6 +176,9 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
             }
             // 标记 ready 接口
             CommonController.setReady();
+            ServerService.buildLink();
+            ServerService.buildLink();
+            ServerService.buildLink();
             log.info("Server start data merge...");
         }
     }

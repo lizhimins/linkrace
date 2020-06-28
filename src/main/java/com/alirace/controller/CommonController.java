@@ -22,7 +22,7 @@ public class CommonController {
 
     // 程序是否准备完成
     public static volatile AtomicBoolean isReady = new AtomicBoolean(false);
-    private static Integer DATA_SOURCE_PORT = 8002;
+    private static Integer DATA_SOURCE_PORT = 8000;
     private static AtomicBoolean isBeginning = new AtomicBoolean(false);
     private static String json;
 
@@ -103,7 +103,7 @@ public class CommonController {
             Map.Entry<String, String> entry = iterator.next();
             String key = entry.getKey();
             String value = entry.getValue();
-            // System.out.println(key + "->" + value);
+
             iterator.remove();
         }
         return result;

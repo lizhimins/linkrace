@@ -216,6 +216,25 @@ public class ServerService implements Runnable {
         return MD5Util.byteToMD5(body);
     }
 
+    public static void buildLink() {
+        log.info("Server start build link...");
+        try {
+            RequestBody body = new FormBody.Builder().build();
+            String url = String.format("http://localhost:%s/ready", CommonController.getDataSourcePort());
+            Request request = new Request.Builder().url(url).get().build();
+            Response response = HttpUtil.callHttp(request);
+            if (response.isSuccessful()) {
+                response.close();
+                // log.warn("Server success to build link.");
+                return;
+            }
+            // log.warn("fail to build link:" + response.message());
+            response.close();
+        } catch (Exception e) {
+            log.warn("fail to call finish", e);
+        }
+    }
+
     // http 调用上传接口
     public static void uploadData() {
         log.info("Server start upload data...");

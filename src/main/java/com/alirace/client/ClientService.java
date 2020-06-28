@@ -8,7 +8,6 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
 import java.net.Proxy;
 import java.net.URL;
 import java.util.concurrent.TimeUnit;
@@ -593,7 +592,7 @@ public class ClientService extends Thread {
         }
 
         // 监控服务
-        ClientMonitor.start();
+        // ClientMonitor.start();
 
         // 在最后启动 netty 进行通信
         NettyClient.startNetty();
