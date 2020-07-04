@@ -41,7 +41,7 @@ public class ClientHandler extends SimpleChannelInboundHandler<Object> {
             int serviceId = (int) (syncValue >> 32);
             int otherTimes = (int) syncValue;
             // log.info(String.format("RECV: %x", syncValue));
-            services[serviceId].otherBlockTimes = otherTimes;
+            services[serviceId].otherSpanTimes = otherTimes;
         }
 
         if (MessageType.FINISH.getValue() == message.getType()) {

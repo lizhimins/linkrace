@@ -56,7 +56,7 @@ public class ServerService implements Runnable {
     public static void start() throws InterruptedException, RunnerException {
         log.info("Server initializing start...");
         // 状态监控服务
-        ServerMonitor.start();
+        // ServerMonitor.start();
 
 //        Options opt = new OptionsBuilder()
 //                .include(ServerService.class.getSimpleName())
@@ -72,7 +72,7 @@ public class ServerService implements Runnable {
         thread.start();
 
 
-        TimeUnit.MILLISECONDS.sleep(60000);
+        TimeUnit.MILLISECONDS.sleep(20000);
 //        Iterator<Map.Entry<String, byte[]>> iterator = mergeMap.entrySet().iterator();
 //        while (iterator.hasNext()) {
 //            Map.Entry<String, byte[]> entry = iterator.next();

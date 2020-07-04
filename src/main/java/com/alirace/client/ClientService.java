@@ -31,8 +31,8 @@ public class ClientService extends Thread {
     private long finishOffset = 0L;
 
     // 机器同步算法, 防止快机太快
-    public int readBlockTimes = 0;
-    public int otherBlockTimes = 0;
+    public int readSpanTimes = 0;
+    public int otherSpanTimes = 0;
 
     // 字节缓冲区和处理指针
     private int preOffset = 0; // 起始偏移 左指针
@@ -180,10 +180,11 @@ public class ClientService extends Thread {
         }
     }
 
-    private static int totalSpan = 0;
     // 每处理一条日志, 就需要调用一次这个函数
     private void handleSpan() throws Exception {
-        totalSpan++;
+        if (readSpanTimes++ % 4096 == 0) {
+            syncBlock();
+        }
 
         // 左指针 = 当前指针
         preOffset = nowOffset;
@@ -255,7 +256,7 @@ public class ClientService extends Thread {
         try {
             pullData();
             ClientMonitor.printStatus();
-            log.info("total: " + totalSpan);
+            log.info("total: " + readSpanTimes);
             long syncValue = NumberUtil.combineInt2Long(threadId, Integer.MAX_VALUE);
             NettyClient.sendSync(syncValue);
             NettyClient.finish("\n".getBytes());
@@ -610,14 +611,11 @@ public class ClientService extends Thread {
     }
 
     public void syncBlock() throws InterruptedException {
-        readBlockTimes++;
-        while (readBlockTimes - otherBlockTimes > SYNC_GAP) {
+        while (readSpanTimes - otherSpanTimes > SYNC_GAP) {
             TimeUnit.MILLISECONDS.sleep(1);
         }
-        if (readBlockTimes % 4 == 0) {
-            long syncValue = NumberUtil.combineInt2Long(threadId, readBlockTimes);
-            NettyClient.sendSync(syncValue);
-        }
+        long syncValue = NumberUtil.combineInt2Long(threadId, readSpanTimes);
+        NettyClient.sendSync(syncValue);
     }
 
     // 只初始化一次
@@ -629,7 +627,7 @@ public class ClientService extends Thread {
         }
 
         // 监控服务
-        ClientMonitor.start();
+        // ClientMonitor.start();
 
         // 在最后启动 netty 进行通信
         NettyClient.startNetty();

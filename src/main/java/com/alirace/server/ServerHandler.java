@@ -176,9 +176,7 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
             }
             // 标记 ready 接口
             CommonController.setReady();
-            ServerService.buildLink();
-            ServerService.buildLink();
-            ServerService.buildLink();
+            // ServerService.buildLink();
             log.info("Server start data merge...");
         }
     }
