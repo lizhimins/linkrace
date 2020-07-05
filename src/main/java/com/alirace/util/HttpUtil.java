@@ -25,8 +25,8 @@ public class HttpUtil {
 
     private final static OkHttpClient OK_HTTP_CLIENT = new OkHttpClient.Builder()
             .proxy(Proxy.NO_PROXY)
-            .connectTimeout(50L, TimeUnit.SECONDS)
-            .readTimeout(60L, TimeUnit.SECONDS)
+            .connectTimeout(180L, TimeUnit.SECONDS)
+            .readTimeout(180L, TimeUnit.SECONDS)
             .build();
 
     public static Response callHttp(Request request) throws IOException {

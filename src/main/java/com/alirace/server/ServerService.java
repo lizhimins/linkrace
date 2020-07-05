@@ -72,7 +72,7 @@ public class ServerService implements Runnable {
         thread.start();
 
 
-        TimeUnit.MILLISECONDS.sleep(20000);
+        TimeUnit.MILLISECONDS.sleep(8400);
 //        Iterator<Map.Entry<String, byte[]>> iterator = mergeMap.entrySet().iterator();
 //        while (iterator.hasNext()) {
 //            Map.Entry<String, byte[]> entry = iterator.next();
@@ -255,12 +255,10 @@ public class ServerService implements Runnable {
              log.warn("Server success to sendCheckSum, result.");
         } catch (Exception e) {
             log.warn("fail to call finish", e);
+            uploadData();
         }
         log.info("Server data upload success...");
-        log.info(JSON.toJSONString(resultMap));
-    }
-
-    public static void flushResult(byte[] bytes) {
+        // log.info(JSON.toJSONString(resultMap));
     }
 
     @Override

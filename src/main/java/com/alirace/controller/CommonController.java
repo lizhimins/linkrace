@@ -5,6 +5,7 @@ import com.alibaba.fastjson.TypeReference;
 import com.alibaba.fastjson.parser.Feature;
 import com.alirace.Application;
 import com.alirace.client.ClientService;
+import com.alirace.server.ServerService;
 import com.alirace.util.HttpUtil;
 import org.springframework.web.bind.annotation.*;
 
@@ -78,9 +79,9 @@ public class CommonController {
                 ClientService.setPathAndPull(getPath());
             }
 
-//            if (Application.isBackendProcess()) {
-//                HttpUtil.init();
-//            }
+            if (Application.isBackendProcess()) {
+                ServerService.buildLink();
+            }
         }
         return "suc";
     }

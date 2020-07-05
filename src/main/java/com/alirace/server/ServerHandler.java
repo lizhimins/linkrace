@@ -134,26 +134,29 @@ public class ServerHandler extends SimpleChannelInboundHandler<Object> {
 
         if (MessageType.DONE.getValue() == message.getType()) {
             if (++doneCount == 2) {
-                Iterator<Map.Entry<String, byte[]>> iterator = mergeMap.entrySet().iterator();
-                while (iterator.hasNext()) {
-                    Map.Entry<String, byte[]> entry = iterator.next();
-                    byte[] body = entry.getValue();
-                    StringBuffer buffer = new StringBuffer(16);
-                    for (int i = 0; i < 16; i++) {
-                        if (body[i] == (byte) '|') {
-                            break;
+                try {
+                    Iterator<Map.Entry<String, byte[]>> iterator = mergeMap.entrySet().iterator();
+                    while (iterator.hasNext()) {
+                        Map.Entry<String, byte[]> entry = iterator.next();
+                        byte[] body = entry.getValue();
+                        StringBuffer buffer = new StringBuffer(16);
+                        for (int i = 0; i < 16; i++) {
+                            if (body[i] == (byte) '|') {
+                                break;
+                            }
+                            buffer.append((char) (int) body[i]);
                         }
-                        buffer.append((char) (int) body[i]);
+                        String traceId = buffer.toString();
+                        String md5 = MD5Util.byteToMD5(entry.getValue());
+                        // String md5 = ServerService.flushResult3(entry.getValue());
+                        resultMap.put(traceId, md5);
+                        // HttpUtil.post(traceId, md5);
+                        // log.info(new String(entry.getValue()));
+                        // iterator.remove();
                     }
-                    String traceId = buffer.toString();
-                    String md5 = MD5Util.byteToMD5(entry.getValue());
-                    // String md5 = ServerService.flushResult3(entry.getValue());
-                    resultMap.put(traceId, md5);
-                    // HttpUtil.post(traceId, md5);
-                    // log.info(new String(entry.getValue()));
-                    // iterator.remove();
+                } finally {
+                    uploadData();
                 }
-                uploadData();
             }
         }
     }

@@ -19,7 +19,7 @@ public class Constant {
     public static final int BUCKET_NUM = 0x1 << 20;
     public static final int BUCKET_CAP = 16;
 
-    public static final int OFFSET_NUM = 120_0000 / nThreads;
+    public static final int OFFSET_NUM = 110_0000 / nThreads;
     public static final int OFFSET_CAP = 108;
 
     public static final int WINDOW_SIZE = 20000;
